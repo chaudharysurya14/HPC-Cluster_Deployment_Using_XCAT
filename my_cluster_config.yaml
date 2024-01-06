@@ -1,0 +1,6 @@
+# Sample configuration file
+nodes:
+  - node1
+  - node2
+  - node3
+# Add more configuration details...
