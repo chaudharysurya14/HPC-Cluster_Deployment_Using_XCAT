@@ -25,8 +25,8 @@ This project facilitates the deployment of a High-Performance Computing (HPC) cl
 1. Clone this repository:
 
     ```bash
-    git clone https://github.com/your-username/HPC-Cluster-XCAT.git
-    cd HPC-Cluster-XCAT
+    git clone https://github.com/chaudharysurya14/HPC-Cluster_Deployment_Using_XCAT.git
+    cd HPC-Cluster_Deployment_Using_XCAT
     ```
 
 2. [Add specific installation steps]
