@@ -1,0 +1,2090 @@
+    inet6 fe80::d8cd:19bc:af6:c081/64 scope link tentative noprefixroute dadfailed
+       valid_lft forever preferred_lft forever
+    inet6 fe80::ee3e:b3e:c4e2:2841/64 scope link noprefixroute
+       valid_lft forever preferred_lft forever
+3: ens34: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
+    link/ether 00:0c:29:87:3e:51 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.86.154/24 brd 192.168.86.255 scope global noprefixroute ens34
+       valid_lft forever preferred_lft forever
+    inet6 fe80::ab3b:244c:821c:9516/64 scope link tentative noprefixroute dadfailed
+       valid_lft forever preferred_lft forever
+    inet6 fe80::8fec:86f4:51fc:2332/64 scope link noprefixroute
+       valid_lft forever preferred_lft forever
+4: virbr0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN group default qlen 1000
+    link/ether 52:54:00:e6:21:c6 brd ff:ff:ff:ff:ff:ff
+    inet 192.168.122.1/24 brd 192.168.122.255 scope global virbr0
+       valid_lft forever preferred_lft forever
+5: virbr0-nic: <BROADCAST,MULTICAST> mtu 1500 qdisc pfifo_fast master virbr0 state DOWN group default qlen 1000
+    link/ether 52:54:00:e6:21:c6 brd ff:ff:ff:ff:ff:ff
+[root@master ~]# df -Th
+Filesystem              Type      Size  Used Avail Use% Mounted on
+devtmpfs                devtmpfs  3.8G     0  3.8G   0% /dev
+tmpfs                   tmpfs     3.9G     0  3.9G   0% /dev/shm
+tmpfs                   tmpfs     3.9G   13M  3.8G   1% /run
+tmpfs                   tmpfs     3.9G     0  3.9G   0% /sys/fs/cgroup
+/dev/mapper/centos-root xfs        44G  5.6G   39G  13% /
+/dev/sda1               xfs      1014M  185M  830M  19% /boot
+tmpfs                   tmpfs     781M   36K  781M   1% /run/user/0
+/dev/sr0                iso9660   4.4G  4.4G     0 100% /run/media/root/CentOS 7 x86_64
+[root@master ~]# mkdir -p /centos_image
+[root@master ~]# mkdef -t node -o node1 groups=all netboot=pxe mac=00:50:56:33:2E:D3 ip=192.168.86.155
+1 object definitions have been created or modified.
+[root@master ~]# lsdef node1
+Object name: node1
+    groups=all
+    ip=192.168.86.155
+    mac=00:50:56:33:2E:D3
+    netboot=pxe
+    postbootscripts=otherpkgs
+    postscripts=syslog,remoteshell,syncfiles
+[root@master ~]# makehosts
+[root@master ~]# makedhcp
+Usage: makedhcp -n
+        makedhcp -a
+        makedhcp -a -d
+        makedhcp -d noderange
+        makedhcp <noderange> [-s statements]
+        makedhcp -q
+        makedhcp [-h|--help]
+[root@master ~]# makedhcp -d node1
+[root@master ~]# cat /etc/hosts
+127.0.0.1   localhost localhost.localdomain localhost4 localhost4.localdomain4
+::1         localhost localhost.localdomain localhost6 localhost6.localdomain6
+192.168.86.154 master master.hpcsa.in
+
+192.168.86.155 node1 node1.hpcsa.in
+[root@master ~]# cat /etc/dhcp/dhcpd.conf
+#xCAT generated dhcp configuration
+
+option conf-file code 209 = text;
+option space isan;
+option isan-encap-opts code 43 = encapsulate isan;
+option isan.iqn code 203 = string;
+option isan.root-path code 201 = string;
+option space gpxe;
+option gpxe-encap-opts code 175 = encapsulate gpxe;
+option gpxe.bus-id code 177 = string;
+option user-class-identifier code 77 = string;
+option gpxe.no-pxedhcp code 176 = unsigned integer 8;
+option tcode code 101 = text;
+option iscsi-initiator-iqn code 203 = string;
+ddns-update-style interim;
+ignore client-updates;
+option client-architecture code 93 = unsigned integer 16;
+option tcode "Asia/Calcutta";
+option gpxe.no-pxedhcp 1;
+option www-server code 114 = string;
+option cumulus-provision-url code 239 = text;
+
+omapi-port 7911;
+key xcat_key {
+  algorithm hmac-md5;
+  secret "RDFUUXpTNkpON0hLRkkxWlVDVnJmcktsRnBabGZPcHY=";
+};
+omapi-key xcat_key;
+class "pxe" {
+   match if substring (option vendor-class-identifier, 0, 9) = "PXEClient";
+   ddns-updates off;
+    max-lease-time 600;
+}
+shared-network ens34 {
+  subnet 192.168.86.0 netmask 255.255.255.0 {
+    authoritative;
+    max-lease-time 43200;
+    min-lease-time 43200;
+    default-lease-time 43200;
+    option routers  192.168.86.154;
+    next-server  192.168.86.154;
+    option log-servers 192.168.86.154;
+    option ntp-servers 192.168.86.154;
+    option domain-name "hpcsa.in";
+    option domain-name-servers  192.168.86.154;
+    option interface-mtu 1500;
+    option domain-search  "hpcsa.in";
+    option cumulus-provision-url "http://192.168.86.154:80/install/postscripts/cumulusztp";
+    zone hpcsa.in. {
+       primary 192.168.86.154; key xcat_key;
+    }
+    zone 86.168.192.IN-ADDR.ARPA. {
+       primary 192.168.86.154; key xcat_key;
+    }
+    if option user-class-identifier = "xNBA" and option client-architecture = 00:00 { #x86, xCAT Network Boot Agent
+        always-broadcast on;
+        filename = "http://192.168.86.154:80/tftpboot/xcat/xnba/nets/192.168.86.0_24";
+    } else if option user-class-identifier = "xNBA" and option client-architecture = 00:09 { #x86, xCAT Network Boot Agent
+        filename = "http://192.168.86.154:80/tftpboot/xcat/xnba/nets/192.168.86.0_24.uefi";
+    } else if option client-architecture = 00:00  { #x86
+        filename "xcat/xnba.kpxe";
+    } else if option vendor-class-identifier = "Etherboot-5.4"  { #x86
+        filename "xcat/xnba.kpxe";
+    } else if option client-architecture = 00:07 { #x86_64 uefi
+         filename "xcat/xnba.efi";
+    } else if option client-architecture = 00:09 { #x86_64 uefi alternative id
+         filename "xcat/xnba.efi";
+    } else if option client-architecture = 00:02 { #ia64
+         filename "elilo.efi";
+    } else if option client-architecture = 00:0e { #OPAL-v3
+         option conf-file = "http://192.168.86.154:80/tftpboot/pxelinux.cfg/p/192.168.86.0_24";
+    } else if substring (option vendor-class-identifier,0,11) = "onie_vendor" { #for onie on cumulus switch
+        option www-server = "http://192.168.86.154:80/install/onie/onie-installer";
+    } else if substring(filename,0,1) = null { #otherwise, provide yaboot if the client isn't specific
+         filename "/yaboot";
+    }
+  } # 192.168.86.0/255.255.255.0 subnet_end
+} # ens34 nic_end
+#definition for host xcatmntest aka host xcatmntest can be found in the dhcpd.leases file (typically /var/lib/dhcpd/dhcpd.leases)
+[root@master ~]# cat /etc/dhcp/dhcpd.conf | grep node1
+[root@master ~]# cat /var/lib/dhcpd/dhcpd.leases
+# The format of this file is documented in the dhcpd.leases(5) manual page.
+# This lease file was written by isc-dhcp-4.2.5
+
+server-duid "\000\001\000\001,w\313\344\000\014)\207>Q";
+
+host xcatmntest {
+  dynamic;
+  hardware ethernet aa:aa:aa:aa:aa:aa;
+  uid aa:aa:aa:aa:aa:aa;
+  fixed-address 192.168.86.154;
+        supersede server.ddns-hostname = "xcatmntest";
+        supersede host-name = "xcatmntest";
+}
+host xcatmntest {
+  dynamic;
+  deleted;
+}
+host xcatmntest {
+  dynamic;
+  hardware ethernet aa:aa:aa:aa:aa:aa;
+  uid aa:aa:aa:aa:aa:aa;
+  fixed-address 192.168.86.154;
+        supersede server.ddns-hostname = "xcatmntest";
+        supersede host-name = "xcatmntest";
+}
+host xcatmntest {
+  dynamic;
+  deleted;
+}
+host xcatmntest {
+  dynamic;
+  hardware ethernet aa:aa:aa:aa:aa:aa;
+  uid aa:aa:aa:aa:aa:aa;
+  fixed-address 192.168.86.154;
+        supersede server.ddns-hostname = "xcatmntest";
+        supersede host-name = "xcatmntest";
+}
+host xcatmntest {
+  dynamic;
+  deleted;
+}
+host xcatmntest {
+  dynamic;
+  hardware ethernet aa:aa:aa:aa:aa:aa;
+  uid aa:aa:aa:aa:aa:aa;
+  fixed-address 192.168.86.154;
+        supersede server.ddns-hostname = "xcatmntest";
+        supersede host-name = "xcatmntest";
+}
+host xcatmntest {
+  dynamic;
+  deleted;
+}
+host xcatmntest {
+  dynamic;
+  hardware ethernet aa:aa:aa:aa:aa:aa;
+  uid aa:aa:aa:aa:aa:aa;
+  fixed-address 192.168.86.154;
+        supersede server.ddns-hostname = "xcatmntest";
+        supersede host-name = "xcatmntest";
+}
+host xcatmntest {
+  dynamic;
+  deleted;
+}
+host xcatmntest {
+  dynamic;
+  hardware ethernet aa:aa:aa:aa:aa:aa;
+  uid aa:aa:aa:aa:aa:aa;
+  fixed-address 192.168.86.154;
+        supersede server.ddns-hostname = "xcatmntest";
+        supersede host-name = "xcatmntest";
+}
+host xcatmntest {
+  dynamic;
+  deleted;
+}
+[root@master ~]# mv /var/lib/dhcpd/dhcpd.leases /var/lib/dhcpd/dhcpd.leases_bk
+[root@master ~]# ls -lrth
+total 12K
+-rw-------. 1 root root 1.8K Aug 22 17:15 anaconda-ks.cfg
+-rw-r--r--. 1 root root 1.9K Aug 22 17:17 initial-setup-ks.cfg
+drwxr-xr-x. 2 root root    6 Aug 22 17:17 Videos
+drwxr-xr-x. 2 root root    6 Aug 22 17:17 Templates
+drwxr-xr-x. 2 root root    6 Aug 22 17:17 Public
+drwxr-xr-x. 2 root root    6 Aug 22 17:17 Pictures
+drwxr-xr-x. 2 root root    6 Aug 22 17:17 Music
+drwxr-xr-x. 2 root root    6 Aug 22 17:17 Downloads
+drwxr-xr-x. 2 root root    6 Aug 22 17:17 Documents
+drwxr-xr-x. 2 root root    6 Aug 22 17:17 Desktop
+-rw-r--r--. 1 root root 1.5K Aug 22 17:21 xcat_install.sh
+[root@master ~]# ls -lrth /var/lib/dhcpd
+total 4.0K
+-rw-r--r-- 1 dhcpd dhcpd    0 Jun  9  2021 dhcpd.leases~
+-rw-r--r-- 1 dhcpd dhcpd    0 Jun  9  2021 dhcpd6.leases
+-rw-r--r-- 1 dhcpd dhcpd 1.8K Aug 23 01:42 dhcpd.leases_bk
+[root@master ~]# touch /var/lib/dhcpd/dhcpd.leases
+[root@master ~]# cat /var/lib/dhcpd/dhcpd.leases
+[root@master ~]# systemctl status dhcp
+Unit dhcp.service could not be found.
+[root@master ~]# systemctl status dhcpd
+● dhcpd.service - DHCPv4 Server Daemon
+   Loaded: loaded (/usr/lib/systemd/system/dhcpd.service; enabled; vendor preset: disabled)
+   Active: active (running) since Wed 2023-08-23 01:11:24 IST; 41min ago
+     Docs: man:dhcpd(8)
+           man:dhcpd.conf(5)
+ Main PID: 6100 (dhcpd)
+   Status: "Dispatching packets..."
+    Tasks: 1
+   CGroup: /system.slice/dhcpd.service
+           └─6100 /usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd --no-pid
+
+Aug 23 01:11:24 master.hpcsa.in dhcpd[6100]:    to which interface ens33 is attached. **
+Aug 23 01:11:24 master.hpcsa.in dhcpd[6100]:
+Aug 23 01:11:24 master.hpcsa.in dhcpd[6100]: Sending on   Socket/fallback/fallback-net
+Aug 23 01:13:04 master.hpcsa.in dhcpd[6100]: DHCPDISCOVER from 00:0c:29:e7:2b:7d via ens34: network ens34: no free leases
+Aug 23 01:13:06 master.hpcsa.in dhcpd[6100]: DHCPDISCOVER from 00:0c:29:e7:2b:7d via ens34: network ens34: no free leases
+Aug 23 01:13:12 master.hpcsa.in dhcpd[6100]: DHCPDISCOVER from 00:0c:29:e7:2b:7d via ens34: network ens34: no free leases
+Aug 23 01:13:17 master.hpcsa.in dhcpd[6100]: DHCPDISCOVER from 00:0c:29:e7:2b:7d via ens34: network ens34: no free leases
+Aug 23 01:13:23 master.hpcsa.in dhcpd[6100]: DHCPDISCOVER from 00:0c:29:e7:2b:7d via ens34: network ens34: no free leases
+Aug 23 01:13:34 master.hpcsa.in dhcpd[6100]: DHCPDISCOVER from 00:0c:29:e7:2b:7d via ens34: network ens34: no free leases
+Aug 23 01:13:49 master.hpcsa.in dhcpd[6100]: DHCPDISCOVER from 00:0c:29:e7:2b:7d via ens34: network ens34: no free leases
+[root@master ~]# systemctl restart dhcpd
+[root@master ~]# systemctl status dhcpd
+● dhcpd.service - DHCPv4 Server Daemon
+   Loaded: loaded (/usr/lib/systemd/system/dhcpd.service; enabled; vendor preset: disabled)
+   Active: active (running) since Wed 2023-08-23 01:53:14 IST; 3s ago
+     Docs: man:dhcpd(8)
+           man:dhcpd.conf(5)
+ Main PID: 62635 (dhcpd)
+   Status: "Dispatching packets..."
+    Tasks: 1
+   CGroup: /system.slice/dhcpd.service
+           └─62635 /usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd --no-pid
+
+Aug 23 01:53:14 master.hpcsa.in dhcpd[62635]: Sending on   LPF/ens34/00:0c:29:87:3e:51/ens34
+Aug 23 01:53:14 master.hpcsa.in systemd[1]: Started DHCPv4 Server Daemon.
+Aug 23 01:53:14 master.hpcsa.in dhcpd[62635]:
+Aug 23 01:53:14 master.hpcsa.in dhcpd[62635]: No subnet declaration for ens33 (192.168.20.128).
+Aug 23 01:53:14 master.hpcsa.in dhcpd[62635]: ** Ignoring requests on ens33.  If this is not what
+Aug 23 01:53:14 master.hpcsa.in dhcpd[62635]:    you want, please write a subnet declaration
+Aug 23 01:53:14 master.hpcsa.in dhcpd[62635]:    in your dhcpd.conf file for the network segment
+Aug 23 01:53:14 master.hpcsa.in dhcpd[62635]:    to which interface ens33 is attached. **
+Aug 23 01:53:14 master.hpcsa.in dhcpd[62635]:
+Aug 23 01:53:14 master.hpcsa.in dhcpd[62635]: Sending on   Socket/fallback/fallback-net
+[root@master ~]# makedhcp -n
+Renamed existing dhcp configuration file to  /etc/dhcp/dhcpd.conf.xcatbak
+
+Warning: [master]: No dynamic range specified for 192.168.86.0. If hardware discovery is being used, a dynamic range is required.
+[root@master ~]# cat /var/lib/dhcpd/dhcpd.leases
+# The format of this file is documented in the dhcpd.leases(5) manual page.
+# This lease file was written by isc-dhcp-4.2.5
+
+server-duid "\000\001\000\001,w\325\262\000\014)\207>Q";
+
+[root@master ~]# nodels
+node1
+[root@master ~]# copycds /centos_image/CentOS-7-x86_64-DVD-2009.iso
+Copying media to /install/centos7.9/x86_64
+Media copy operation successful
+[root@master ~]# lsdef -t osimage
+centos7.9-x86_64-install-compute  (osimage)
+centos7.9-x86_64-netboot-compute  (osimage)
+centos7.9-x86_64-statelite-compute  (osimage)
+[root@master ~]# ledef -t osimage centos7.9-x86_64-netboot-compute
+bash: ledef: command not found...
+[root@master ~]# lsdef -t osimage centos7.9-x86_64-netboot-compute
+Object name: centos7.9-x86_64-netboot-compute
+    exlist=/opt/xcat/share/xcat/netboot/centos/compute.centos7.exlist
+    imagetype=linux
+    osarch=x86_64
+    osdistroname=centos7.9-x86_64
+    osname=Linux
+    osvers=centos7.9
+    otherpkgdir=/install/post/otherpkgs/centos7.9/x86_64
+    pkgdir=/install/centos7.9/x86_64
+    pkglist=/opt/xcat/share/xcat/netboot/centos/compute.centos7.pkglist
+    postinstall=/opt/xcat/share/xcat/netboot/centos/compute.centos7.postinstall
+    profile=compute
+    provmethod=netboot
+    rootimgdir=/install/netboot/centos7.9/x86_64/compute
+[root@master ~]# ls /install/
+centos7.9  postscripts  prescripts  winpostscripts
+[root@master ~]# genimage centos7.9-x86_64-netboot-compute
+Generating image:
+cd /opt/xcat/share/xcat/netboot/centos; ./genimage -a x86_64 -o centos7.9 -p compute --srcdir "/install/centos7.9/x86_64" --pkglist /opt/xcat/share/xcat/netboot/centos/compute.centos7.pkglist --otherpkgdir "/install/post/otherpkgs/centos7.9/x86_64" --postinstall "/opt/xcat/share/xcat/netboot/centos/compute.centos7.postinstall" --rootimgdir /install/netboot/centos7.9/x86_64/compute --tempfile /tmp/xcat_genimage.62786 centos7.9-x86_64-netboot-compute
+102 blocks
+/opt/xcat/share/xcat/netboot/centos
+102 blocks
+/opt/xcat/share/xcat/netboot/centos
+ yum -y -c /tmp/genimage.62801.yum.conf --installroot=/install/netboot/centos7.9/x86_64/compute/rootimg/ --disablerepo=* --enablerepo=centos7.9-x86_64-0  install  bash dracut-network nfs-utils openssl dhclient kernel openssh-server openssh-clients iputils bc irqbalance procps-ng wget vim-minimal ntp rpm rsync rsyslog e2fsprogs parted net-tools gzip tar xz ethtool
+Resolving Dependencies
+--> Running transaction check
+---> Package bash.x86_64 0:4.2.46-34.el7 will be installed
+--> Processing Dependency: rtld(GNU_HASH) for package: bash-4.2.46-34.el7.x86_64
+--> Processing Dependency: libdl.so.2(GLIBC_2.2.5)(64bit) for package: bash-4.2.46-34.el7.x86_64
+--> Processing Dependency: libc.so.6(GLIBC_2.15)(64bit) for package: bash-4.2.46-34.el7.x86_64
+--> Processing Dependency: libtinfo.so.5()(64bit) for package: bash-4.2.46-34.el7.x86_64
+--> Processing Dependency: libdl.so.2()(64bit) for package: bash-4.2.46-34.el7.x86_64
+---> Package bc.x86_64 0:1.06.95-13.el7 will be installed
+--> Processing Dependency: /sbin/install-info for package: bc-1.06.95-13.el7.x86_64
+--> Processing Dependency: /sbin/install-info for package: bc-1.06.95-13.el7.x86_64
+--> Processing Dependency: libreadline.so.6()(64bit) for package: bc-1.06.95-13.el7.x86_64
+---> Package dhclient.x86_64 12:4.2.5-82.el7.centos will be installed
+--> Processing Dependency: dhcp-libs(x86-64) = 12:4.2.5-82.el7.centos for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: dhcp-common = 12:4.2.5-82.el7.centos for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: sed for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: iproute for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: initscripts for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: hostname for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: grep for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: gawk for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: coreutils for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: libsystemd-daemon.so.0()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: libomapi.so.0()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: libldap-2.4.so.2()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: liblber-2.4.so.2()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: libkrb5.so.3()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: libk5crypto.so.3()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: libisc-export.so.169()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: libgssapi_krb5.so.2()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: libdns-export.so.1102()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: libcrypto.so.10()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: libcom_err.so.2()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: libcap.so.2()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+--> Processing Dependency: libcap-ng.so.0()(64bit) for package: 12:dhclient-4.2.5-82.el7.centos.x86_64
+---> Package dracut-network.x86_64 0:033-572.el7 will be installed
+--> Processing Dependency: dracut = 033-572.el7 for package: dracut-network-033-572.el7.x86_64
+---> Package e2fsprogs.x86_64 0:1.42.9-19.el7 will be installed
+--> Processing Dependency: libss = 1.42.9-19.el7 for package: e2fsprogs-1.42.9-19.el7.x86_64
+--> Processing Dependency: e2fsprogs-libs(x86-64) = 1.42.9-19.el7 for package: e2fsprogs-1.42.9-19.el7.x86_64
+--> Processing Dependency: libuuid.so.1(UUID_1.0)(64bit) for package: e2fsprogs-1.42.9-19.el7.x86_64
+--> Processing Dependency: libblkid.so.1(BLKID_2.17)(64bit) for package: e2fsprogs-1.42.9-19.el7.x86_64
+--> Processing Dependency: libblkid.so.1(BLKID_2.15)(64bit) for package: e2fsprogs-1.42.9-19.el7.x86_64
+--> Processing Dependency: libblkid.so.1(BLKID_1.0)(64bit) for package: e2fsprogs-1.42.9-19.el7.x86_64
+--> Processing Dependency: libuuid.so.1()(64bit) for package: e2fsprogs-1.42.9-19.el7.x86_64
+--> Processing Dependency: libss.so.2()(64bit) for package: e2fsprogs-1.42.9-19.el7.x86_64
+--> Processing Dependency: libext2fs.so.2()(64bit) for package: e2fsprogs-1.42.9-19.el7.x86_64
+--> Processing Dependency: libe2p.so.2()(64bit) for package: e2fsprogs-1.42.9-19.el7.x86_64
+--> Processing Dependency: libblkid.so.1()(64bit) for package: e2fsprogs-1.42.9-19.el7.x86_64
+---> Package ethtool.x86_64 2:4.8-10.el7 will be installed
+---> Package gzip.x86_64 0:1.5-10.el7 will be installed
+---> Package iputils.x86_64 0:20160308-10.el7 will be installed
+--> Processing Dependency: filesystem >= 3 for package: iputils-20160308-10.el7.x86_64
+--> Processing Dependency: systemd for package: iputils-20160308-10.el7.x86_64
+--> Processing Dependency: systemd for package: iputils-20160308-10.el7.x86_64
+--> Processing Dependency: libidn.so.11(LIBIDN_1.0)(64bit) for package: iputils-20160308-10.el7.x86_64
+--> Processing Dependency: /sbin/chkconfig for package: iputils-20160308-10.el7.x86_64
+--> Processing Dependency: /sbin/chkconfig for package: iputils-20160308-10.el7.x86_64
+--> Processing Dependency: libidn.so.11()(64bit) for package: iputils-20160308-10.el7.x86_64
+---> Package irqbalance.x86_64 3:1.0.7-12.el7 will be installed
+--> Processing Dependency: numactl-libs for package: 3:irqbalance-1.0.7-12.el7.x86_64
+--> Processing Dependency: libnuma.so.1(libnuma_1.1)(64bit) for package: 3:irqbalance-1.0.7-12.el7.x86_64
+--> Processing Dependency: libnuma.so.1()(64bit) for package: 3:irqbalance-1.0.7-12.el7.x86_64
+--> Processing Dependency: libglib-2.0.so.0()(64bit) for package: 3:irqbalance-1.0.7-12.el7.x86_64
+---> Package kernel.x86_64 0:3.10.0-1160.el7 will be installed
+--> Processing Dependency: module-init-tools >= 3.16-2 for package: kernel-3.10.0-1160.el7.x86_64
+--> Processing Dependency: linux-firmware >= 20190429-72 for package: kernel-3.10.0-1160.el7.x86_64
+--> Processing Dependency: grubby >= 8.28-2 for package: kernel-3.10.0-1160.el7.x86_64
+--> Processing Dependency: system-release for package: kernel-3.10.0-1160.el7.x86_64
+--> Processing Dependency: /usr/sbin/new-kernel-pkg for package: kernel-3.10.0-1160.el7.x86_64
+--> Processing Dependency: /usr/sbin/new-kernel-pkg for package: kernel-3.10.0-1160.el7.x86_64
+---> Package net-tools.x86_64 0:2.0-0.25.20131004git.el7 will be installed
+--> Processing Dependency: libselinux.so.1()(64bit) for package: net-tools-2.0-0.25.20131004git.el7.x86_64
+---> Package nfs-utils.x86_64 1:1.3.0-0.68.el7 will be installed
+--> Processing Dependency: shadow-utils >= 4.0.3-25 for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libtirpc >= 0.2.4-0.7 for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: gssproxy >= 0.7.0-3 for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: rpcbind for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: quota for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libnfsidmap for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libmount.so.1(MOUNT_2.19)(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libmount for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libkeyutils.so.1(KEYUTILS_1.5)(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libkeyutils.so.1(KEYUTILS_1.4)(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libkeyutils.so.1(KEYUTILS_1.0)(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libkeyutils.so.1(KEYUTILS_0.3)(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libevent for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libdevmapper.so.1.02(DM_1_02_97)(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libdevmapper.so.1.02(Base)(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: keyutils for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: /usr/bin/python for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: /sbin/nologin for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libwrap.so.0()(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libtirpc.so.1()(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libsqlite3.so.0()(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libnfsidmap.so.0()(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libmount.so.1()(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libkeyutils.so.1()(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libevent-2.0.so.5()(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+--> Processing Dependency: libdevmapper.so.1.02()(64bit) for package: 1:nfs-utils-1.3.0-0.68.el7.x86_64
+---> Package ntp.x86_64 0:4.2.6p5-29.el7.centos.2 will be installed
+--> Processing Dependency: ntpdate = 4.2.6p5-29.el7.centos.2 for package: ntp-4.2.6p5-29.el7.centos.2.x86_64
+--> Processing Dependency: libopts.so.25()(64bit) for package: ntp-4.2.6p5-29.el7.centos.2.x86_64
+--> Processing Dependency: libedit.so.0()(64bit) for package: ntp-4.2.6p5-29.el7.centos.2.x86_64
+---> Package openssh-clients.x86_64 0:7.4p1-21.el7 will be installed
+--> Processing Dependency: openssh = 7.4p1-21.el7 for package: openssh-clients-7.4p1-21.el7.x86_64
+--> Processing Dependency: fipscheck-lib(x86-64) >= 1.3.0 for package: openssh-clients-7.4p1-21.el7.x86_64
+--> Processing Dependency: libz.so.1()(64bit) for package: openssh-clients-7.4p1-21.el7.x86_64
+--> Processing Dependency: libfipscheck.so.1()(64bit) for package: openssh-clients-7.4p1-21.el7.x86_64
+---> Package openssh-server.x86_64 0:7.4p1-21.el7 will be installed
+--> Processing Dependency: pam >= 1.0.1-3 for package: openssh-server-7.4p1-21.el7.x86_64
+--> Processing Dependency: libpam.so.0(LIBPAM_1.0)(64bit) for package: openssh-server-7.4p1-21.el7.x86_64
+--> Processing Dependency: libpam.so.0()(64bit) for package: openssh-server-7.4p1-21.el7.x86_64
+--> Processing Dependency: libaudit.so.1()(64bit) for package: openssh-server-7.4p1-21.el7.x86_64
+---> Package openssl.x86_64 1:1.0.2k-19.el7 will be installed
+--> Processing Dependency: make for package: 1:openssl-1.0.2k-19.el7.x86_64
+---> Package parted.x86_64 0:3.1-32.el7 will be installed
+--> Processing Dependency: libsepol.so.1()(64bit) for package: parted-3.1-32.el7.x86_64
+---> Package procps-ng.x86_64 0:3.3.10-28.el7 will be installed
+---> Package rpm.x86_64 0:4.11.3-45.el7 will be installed
+--> Processing Dependency: popt(x86-64) >= 1.10.2.1 for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: libpopt.so.0(LIBPOPT_0)(64bit) for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: curl for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: /usr/bin/db_stat for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: librpmio.so.3()(64bit) for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: librpm.so.3()(64bit) for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: libpopt.so.0()(64bit) for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: libnss3.so()(64bit) for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: liblzma.so.5()(64bit) for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: liblua-5.1.so()(64bit) for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: libelf.so.1()(64bit) for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: libdb-5.3.so()(64bit) for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: libbz2.so.1()(64bit) for package: rpm-4.11.3-45.el7.x86_64
+--> Processing Dependency: libacl.so.1()(64bit) for package: rpm-4.11.3-45.el7.x86_64
+---> Package rsync.x86_64 0:3.1.2-10.el7 will be installed
+--> Processing Dependency: libattr.so.1(ATTR_1.0)(64bit) for package: rsync-3.1.2-10.el7.x86_64
+--> Processing Dependency: libattr.so.1()(64bit) for package: rsync-3.1.2-10.el7.x86_64
+---> Package rsyslog.x86_64 0:8.24.0-55.el7 will be installed
+--> Processing Dependency: logrotate >= 3.5.2 for package: rsyslog-8.24.0-55.el7.x86_64
+--> Processing Dependency: libestr >= 0.1.9 for package: rsyslog-8.24.0-55.el7.x86_64
+--> Processing Dependency: libgcc_s.so.1(GCC_3.3.1)(64bit) for package: rsyslog-8.24.0-55.el7.x86_64
+--> Processing Dependency: libgcc_s.so.1(GCC_3.0)(64bit) for package: rsyslog-8.24.0-55.el7.x86_64
+--> Processing Dependency: libgcc_s.so.1()(64bit) for package: rsyslog-8.24.0-55.el7.x86_64
+--> Processing Dependency: libfastjson.so.4()(64bit) for package: rsyslog-8.24.0-55.el7.x86_64
+--> Processing Dependency: libestr.so.0()(64bit) for package: rsyslog-8.24.0-55.el7.x86_64
+---> Package tar.x86_64 2:1.26-35.el7 will be installed
+---> Package vim-minimal.x86_64 2:7.4.629-7.el7 will be installed
+---> Package wget.x86_64 0:1.14-18.el7_6.1 will be installed
+--> Processing Dependency: libpcre.so.1()(64bit) for package: wget-1.14-18.el7_6.1.x86_64
+---> Package xz.x86_64 0:5.2.2-1.el7 will be installed
+--> Running transaction check
+---> Package audit-libs.x86_64 0:2.8.5-4.el7 will be installed
+---> Package autogen-libopts.x86_64 0:5.18-5.el7 will be installed
+---> Package bind-export-libs.x86_64 32:9.11.4-26.P2.el7 will be installed
+---> Package bzip2-libs.x86_64 0:1.0.6-13.el7 will be installed
+---> Package centos-release.x86_64 0:7-9.2009.0.el7.centos will be installed
+---> Package chkconfig.x86_64 0:1.7.6-1.el7 will be installed
+---> Package coreutils.x86_64 0:8.22-24.el7 will be installed
+--> Processing Dependency: ncurses for package: coreutils-8.22-24.el7.x86_64
+--> Processing Dependency: gmp for package: coreutils-8.22-24.el7.x86_64
+--> Processing Dependency: libgmp.so.10()(64bit) for package: coreutils-8.22-24.el7.x86_64
+---> Package curl.x86_64 0:7.29.0-59.el7 will be installed
+--> Processing Dependency: libcurl = 7.29.0-59.el7 for package: curl-7.29.0-59.el7.x86_64
+--> Processing Dependency: libplds4.so()(64bit) for package: curl-7.29.0-59.el7.x86_64
+--> Processing Dependency: libplc4.so()(64bit) for package: curl-7.29.0-59.el7.x86_64
+--> Processing Dependency: libnssutil3.so()(64bit) for package: curl-7.29.0-59.el7.x86_64
+--> Processing Dependency: libnspr4.so()(64bit) for package: curl-7.29.0-59.el7.x86_64
+--> Processing Dependency: libcurl.so.4()(64bit) for package: curl-7.29.0-59.el7.x86_64
+---> Package device-mapper-libs.x86_64 7:1.02.170-6.el7 will be installed
+--> Processing Dependency: device-mapper = 7:1.02.170-6.el7 for package: 7:device-mapper-libs-1.02.170-6.el7.x86_64
+---> Package dhcp-common.x86_64 12:4.2.5-82.el7.centos will be installed
+---> Package dhcp-libs.x86_64 12:4.2.5-82.el7.centos will be installed
+---> Package dracut.x86_64 0:033-572.el7 will be installed
+--> Processing Dependency: kpartx for package: dracut-033-572.el7.x86_64
+--> Processing Dependency: hardlink for package: dracut-033-572.el7.x86_64
+--> Processing Dependency: findutils for package: dracut-033-572.el7.x86_64
+--> Processing Dependency: cpio for package: dracut-033-572.el7.x86_64
+--> Processing Dependency: /usr/bin/pkg-config for package: dracut-033-572.el7.x86_64
+---> Package e2fsprogs-libs.x86_64 0:1.42.9-19.el7 will be installed
+---> Package elfutils-libelf.x86_64 0:0.176-5.el7 will be installed
+---> Package filesystem.x86_64 0:3.2-25.el7 will be installed
+--> Processing Dependency: setup for package: filesystem-3.2-25.el7.x86_64
+---> Package fipscheck-lib.x86_64 0:1.4.1-6.el7 will be installed
+--> Processing Dependency: /usr/bin/fipscheck for package: fipscheck-lib-1.4.1-6.el7.x86_64
+---> Package gawk.x86_64 0:4.0.2-4.el7_3.1 will be installed
+---> Package glib2.x86_64 0:2.56.1-7.el7 will be installed
+--> Processing Dependency: shared-mime-info for package: glib2-2.56.1-7.el7.x86_64
+--> Processing Dependency: libffi.so.6()(64bit) for package: glib2-2.56.1-7.el7.x86_64
+---> Package glibc.x86_64 0:2.17-317.el7 will be installed
+--> Processing Dependency: glibc-common = 2.17-317.el7 for package: glibc-2.17-317.el7.x86_64
+--> Processing Dependency: libfreebl3.so(NSSRAWHASH_3.12.3)(64bit) for package: glibc-2.17-317.el7.x86_64
+--> Processing Dependency: basesystem for package: glibc-2.17-317.el7.x86_64
+--> Processing Dependency: libfreebl3.so()(64bit) for package: glibc-2.17-317.el7.x86_64
+---> Package grep.x86_64 0:2.20-3.el7 will be installed
+---> Package grubby.x86_64 0:8.28-26.el7 will be installed
+---> Package gssproxy.x86_64 0:0.7.0-29.el7 will be installed
+--> Processing Dependency: libini_config >= 1.3.1-31 for package: gssproxy-0.7.0-29.el7.x86_64
+--> Processing Dependency: libverto-module-base for package: gssproxy-0.7.0-29.el7.x86_64
+--> Processing Dependency: libref_array.so.1(REF_ARRAY_0.1.1)(64bit) for package: gssproxy-0.7.0-29.el7.x86_64
+--> Processing Dependency: libini_config.so.3(INI_CONFIG_1.2.0)(64bit) for package: gssproxy-0.7.0-29.el7.x86_64
+--> Processing Dependency: libini_config.so.3(INI_CONFIG_1.1.0)(64bit) for package: gssproxy-0.7.0-29.el7.x86_64
+--> Processing Dependency: libverto.so.1()(64bit) for package: gssproxy-0.7.0-29.el7.x86_64
+--> Processing Dependency: libref_array.so.1()(64bit) for package: gssproxy-0.7.0-29.el7.x86_64
+--> Processing Dependency: libini_config.so.3()(64bit) for package: gssproxy-0.7.0-29.el7.x86_64
+--> Processing Dependency: libcollection.so.2()(64bit) for package: gssproxy-0.7.0-29.el7.x86_64
+--> Processing Dependency: libbasicobjects.so.0()(64bit) for package: gssproxy-0.7.0-29.el7.x86_64
+---> Package hostname.x86_64 0:3.13-3.el7_7.1 will be installed
+---> Package info.x86_64 0:5.1-5.el7 will be installed
+---> Package initscripts.x86_64 0:9.49.53-1.el7 will be installed
+--> Processing Dependency: sysvinit-tools >= 2.87-5 for package: initscripts-9.49.53-1.el7.x86_64
+---> Package iproute.x86_64 0:4.11.0-30.el7 will be installed
+--> Processing Dependency: libmnl.so.0(LIBMNL_1.0)(64bit) for package: iproute-4.11.0-30.el7.x86_64
+--> Processing Dependency: libxtables.so.10()(64bit) for package: iproute-4.11.0-30.el7.x86_64
+--> Processing Dependency: libmnl.so.0()(64bit) for package: iproute-4.11.0-30.el7.x86_64
+---> Package keyutils.x86_64 0:1.5.8-3.el7 will be installed
+---> Package keyutils-libs.x86_64 0:1.5.8-3.el7 will be installed
+---> Package kmod.x86_64 0:20-28.el7 will be installed
+--> Processing Dependency: diffutils for package: kmod-20-28.el7.x86_64
+--> Processing Dependency: /usr/bin/nm for package: kmod-20-28.el7.x86_64
+---> Package krb5-libs.x86_64 0:1.15.1-50.el7 will be installed
+---> Package libacl.x86_64 0:2.2.51-15.el7 will be installed
+---> Package libattr.x86_64 0:2.4.46-13.el7 will be installed
+---> Package libblkid.x86_64 0:2.23.2-65.el7 will be installed
+---> Package libcap.x86_64 0:2.22-11.el7 will be installed
+---> Package libcap-ng.x86_64 0:0.7.5-4.el7 will be installed
+---> Package libcom_err.x86_64 0:1.42.9-19.el7 will be installed
+---> Package libdb.x86_64 0:5.3.21-25.el7 will be installed
+---> Package libdb-utils.x86_64 0:5.3.21-25.el7 will be installed
+---> Package libedit.x86_64 0:3.0-12.20121213cvs.el7 will be installed
+---> Package libestr.x86_64 0:0.1.9-2.el7 will be installed
+---> Package libevent.x86_64 0:2.0.21-4.el7 will be installed
+---> Package libfastjson.x86_64 0:0.99.4-3.el7 will be installed
+---> Package libgcc.x86_64 0:4.8.5-44.el7 will be installed
+---> Package libidn.x86_64 0:1.28-4.el7 will be installed
+---> Package libmount.x86_64 0:2.23.2-65.el7 will be installed
+---> Package libnfsidmap.x86_64 0:0.25-19.el7 will be installed
+---> Package libselinux.x86_64 0:2.5-15.el7 will be installed
+---> Package libsepol.x86_64 0:2.5-10.el7 will be installed
+---> Package libss.x86_64 0:1.42.9-19.el7 will be installed
+---> Package libtirpc.x86_64 0:0.2.4-0.16.el7 will be installed
+---> Package libuuid.x86_64 0:2.23.2-65.el7 will be installed
+---> Package linux-firmware.noarch 0:20200421-79.git78c0348.el7 will be installed
+---> Package logrotate.x86_64 0:3.8.6-19.el7 will be installed
+---> Package lua.x86_64 0:5.1.4-15.el7 will be installed
+---> Package make.x86_64 1:3.82-24.el7 will be installed
+---> Package ncurses-libs.x86_64 0:5.9-14.20130511.el7_4 will be installed
+--> Processing Dependency: ncurses-base = 5.9-14.20130511.el7_4 for package: ncurses-libs-5.9-14.20130511.el7_4.x86_64
+--> Processing Dependency: libstdc++.so.6(GLIBCXX_3.4)(64bit) for package: ncurses-libs-5.9-14.20130511.el7_4.x86_64
+--> Processing Dependency: libstdc++.so.6(CXXABI_1.3)(64bit) for package: ncurses-libs-5.9-14.20130511.el7_4.x86_64
+--> Processing Dependency: libstdc++.so.6()(64bit) for package: ncurses-libs-5.9-14.20130511.el7_4.x86_64
+---> Package nss.x86_64 0:3.44.0-7.el7_7 will be installed
+--> Processing Dependency: nss-softokn(x86-64) >= 3.44.0-1 for package: nss-3.44.0-7.el7_7.x86_64
+--> Processing Dependency: nss-system-init for package: nss-3.44.0-7.el7_7.x86_64
+--> Processing Dependency: nss-pem(x86-64) for package: nss-3.44.0-7.el7_7.x86_64
+---> Package ntpdate.x86_64 0:4.2.6p5-29.el7.centos.2 will be installed
+---> Package numactl-libs.x86_64 0:2.0.12-5.el7 will be installed
+---> Package openldap.x86_64 0:2.4.44-22.el7 will be installed
+--> Processing Dependency: nss-tools for package: openldap-2.4.44-22.el7.x86_64
+--> Processing Dependency: libsasl2.so.3()(64bit) for package: openldap-2.4.44-22.el7.x86_64
+---> Package openssh.x86_64 0:7.4p1-21.el7 will be installed
+---> Package openssl-libs.x86_64 1:1.0.2k-19.el7 will be installed
+--> Processing Dependency: ca-certificates >= 2008-5 for package: 1:openssl-libs-1.0.2k-19.el7.x86_64
+---> Package pam.x86_64 0:1.1.8-23.el7 will be installed
+--> Processing Dependency: libpwquality >= 0.9.9 for package: pam-1.1.8-23.el7.x86_64
+--> Processing Dependency: cracklib-dicts >= 2.8 for package: pam-1.1.8-23.el7.x86_64
+--> Processing Dependency: libcrack.so.2()(64bit) for package: pam-1.1.8-23.el7.x86_64
+---> Package pcre.x86_64 0:8.32-17.el7 will be installed
+---> Package popt.x86_64 0:1.13-16.el7 will be installed
+---> Package python.x86_64 0:2.7.5-89.el7 will be installed
+--> Processing Dependency: python-libs(x86-64) = 2.7.5-89.el7 for package: python-2.7.5-89.el7.x86_64
+--> Processing Dependency: libpython2.7.so.1.0()(64bit) for package: python-2.7.5-89.el7.x86_64
+---> Package quota.x86_64 1:4.01-19.el7 will be installed
+--> Processing Dependency: quota-nls = 1:4.01-19.el7 for package: 1:quota-4.01-19.el7.x86_64
+--> Processing Dependency: tcp_wrappers for package: 1:quota-4.01-19.el7.x86_64
+---> Package readline.x86_64 0:6.2-11.el7 will be installed
+---> Package rpcbind.x86_64 0:0.2.0-49.el7 will be installed
+--> Processing Dependency: systemd-sysv for package: rpcbind-0.2.0-49.el7.x86_64
+---> Package rpm-libs.x86_64 0:4.11.3-45.el7 will be installed
+---> Package sed.x86_64 0:4.2.2-7.el7 will be installed
+---> Package shadow-utils.x86_64 2:4.6-5.el7 will be installed
+--> Processing Dependency: libsemanage.so.1(LIBSEMANAGE_1.0)(64bit) for package: 2:shadow-utils-4.6-5.el7.x86_64
+--> Processing Dependency: libsemanage.so.1()(64bit) for package: 2:shadow-utils-4.6-5.el7.x86_64
+---> Package sqlite.x86_64 0:3.7.17-8.el7_7.1 will be installed
+---> Package systemd.x86_64 0:219-78.el7 will be installed
+--> Processing Dependency: libkmod.so.2(LIBKMOD_5)(64bit) for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: libgcrypt.so.11(GCRYPT_1.2)(64bit) for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: libdw.so.1(ELFUTILS_0.158)(64bit) for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: libdw.so.1(ELFUTILS_0.130)(64bit) for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: libdw.so.1(ELFUTILS_0.122)(64bit) for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: libcryptsetup.so.12(CRYPTSETUP_2.0)(64bit) for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: dbus for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: acl for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: libqrencode.so.3()(64bit) for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: liblz4.so.1()(64bit) for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: libkmod.so.2()(64bit) for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: libgcrypt.so.11()(64bit) for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: libdw.so.1()(64bit) for package: systemd-219-78.el7.x86_64
+--> Processing Dependency: libcryptsetup.so.12()(64bit) for package: systemd-219-78.el7.x86_64
+---> Package systemd-libs.x86_64 0:219-78.el7 will be installed
+--> Processing Dependency: libgpg-error.so.0()(64bit) for package: systemd-libs-219-78.el7.x86_64
+---> Package tcp_wrappers-libs.x86_64 0:7.6-77.el7 will be installed
+---> Package util-linux.x86_64 0:2.23.2-65.el7 will be installed
+--> Processing Dependency: libsmartcols = 2.23.2-65.el7 for package: util-linux-2.23.2-65.el7.x86_64
+--> Processing Dependency: libutempter.so.0(UTEMPTER_1.1)(64bit) for package: util-linux-2.23.2-65.el7.x86_64
+--> Processing Dependency: libsmartcols.so.1(SMARTCOLS_2.25)(64bit) for package: util-linux-2.23.2-65.el7.x86_64
+--> Processing Dependency: libutempter.so.0()(64bit) for package: util-linux-2.23.2-65.el7.x86_64
+--> Processing Dependency: libuser.so.1()(64bit) for package: util-linux-2.23.2-65.el7.x86_64
+--> Processing Dependency: libsmartcols.so.1()(64bit) for package: util-linux-2.23.2-65.el7.x86_64
+---> Package xz-libs.x86_64 0:5.2.2-1.el7 will be installed
+---> Package zlib.x86_64 0:1.2.7-18.el7 will be installed
+--> Running transaction check
+---> Package acl.x86_64 0:2.2.51-15.el7 will be installed
+---> Package basesystem.noarch 0:10.0-7.el7.centos will be installed
+---> Package binutils.x86_64 0:2.27-44.base.el7 will be installed
+---> Package ca-certificates.noarch 0:2020.2.41-70.0.el7_8 will be installed
+--> Processing Dependency: p11-kit-trust >= 0.23.5 for package: ca-certificates-2020.2.41-70.0.el7_8.noarch
+--> Processing Dependency: p11-kit >= 0.23.5 for package: ca-certificates-2020.2.41-70.0.el7_8.noarch
+---> Package cpio.x86_64 0:2.11-28.el7 will be installed
+---> Package cracklib.x86_64 0:2.9.0-11.el7 will be installed
+---> Package cracklib-dicts.x86_64 0:2.9.0-11.el7 will be installed
+---> Package cryptsetup-libs.x86_64 0:2.0.3-6.el7 will be installed
+--> Processing Dependency: libjson-c.so.2()(64bit) for package: cryptsetup-libs-2.0.3-6.el7.x86_64
+---> Package cyrus-sasl-lib.x86_64 0:2.1.26-23.el7 will be installed
+---> Package dbus.x86_64 1:1.10.24-15.el7 will be installed
+--> Processing Dependency: dbus-libs(x86-64) = 1:1.10.24-15.el7 for package: 1:dbus-1.10.24-15.el7.x86_64
+--> Processing Dependency: libdbus-1.so.3(LIBDBUS_PRIVATE_1.10.24)(64bit) for package: 1:dbus-1.10.24-15.el7.x86_64
+--> Processing Dependency: libdbus-1.so.3(LIBDBUS_1_3)(64bit) for package: 1:dbus-1.10.24-15.el7.x86_64
+--> Processing Dependency: libexpat.so.1()(64bit) for package: 1:dbus-1.10.24-15.el7.x86_64
+--> Processing Dependency: libdbus-1.so.3()(64bit) for package: 1:dbus-1.10.24-15.el7.x86_64
+---> Package device-mapper.x86_64 7:1.02.170-6.el7 will be installed
+---> Package diffutils.x86_64 0:3.3-5.el7 will be installed
+---> Package elfutils-libs.x86_64 0:0.176-5.el7 will be installed
+--> Processing Dependency: default-yama-scope for package: elfutils-libs-0.176-5.el7.x86_64
+---> Package findutils.x86_64 1:4.5.11-6.el7 will be installed
+---> Package fipscheck.x86_64 0:1.4.1-6.el7 will be installed
+---> Package glibc-common.x86_64 0:2.17-317.el7 will be installed
+--> Processing Dependency: tzdata >= 2003a for package: glibc-common-2.17-317.el7.x86_64
+---> Package gmp.x86_64 1:6.0.0-15.el7 will be installed
+---> Package hardlink.x86_64 1:1.0-19.el7 will be installed
+---> Package iptables.x86_64 0:1.4.21-35.el7 will be installed
+--> Processing Dependency: libnfnetlink.so.0()(64bit) for package: iptables-1.4.21-35.el7.x86_64
+--> Processing Dependency: libnetfilter_conntrack.so.3()(64bit) for package: iptables-1.4.21-35.el7.x86_64
+---> Package kmod-libs.x86_64 0:20-28.el7 will be installed
+---> Package kpartx.x86_64 0:0.4.9-133.el7 will be installed
+---> Package libbasicobjects.x86_64 0:0.1.1-32.el7 will be installed
+---> Package libcollection.x86_64 0:0.7.0-32.el7 will be installed
+---> Package libcurl.x86_64 0:7.29.0-59.el7 will be installed
+--> Processing Dependency: libssh2(x86-64) >= 1.8.0 for package: libcurl-7.29.0-59.el7.x86_64
+--> Processing Dependency: libssh2.so.1()(64bit) for package: libcurl-7.29.0-59.el7.x86_64
+---> Package libffi.x86_64 0:3.0.13-19.el7 will be installed
+---> Package libgcrypt.x86_64 0:1.5.3-14.el7 will be installed
+---> Package libgpg-error.x86_64 0:1.12-3.el7 will be installed
+---> Package libini_config.x86_64 0:1.3.1-32.el7 will be installed
+--> Processing Dependency: libpath_utils.so.1(PATH_UTILS_0.2.1)(64bit) for package: libini_config-1.3.1-32.el7.x86_64
+--> Processing Dependency: libpath_utils.so.1()(64bit) for package: libini_config-1.3.1-32.el7.x86_64
+---> Package libmnl.x86_64 0:1.0.3-7.el7 will be installed
+---> Package libpwquality.x86_64 0:1.2.3-5.el7 will be installed
+---> Package libref_array.x86_64 0:0.1.5-32.el7 will be installed
+---> Package libsemanage.x86_64 0:2.5-14.el7 will be installed
+--> Processing Dependency: libustr-1.0.so.1(USTR_1.0.1)(64bit) for package: libsemanage-2.5-14.el7.x86_64
+--> Processing Dependency: libustr-1.0.so.1(USTR_1.0)(64bit) for package: libsemanage-2.5-14.el7.x86_64
+--> Processing Dependency: libustr-1.0.so.1()(64bit) for package: libsemanage-2.5-14.el7.x86_64
+---> Package libsmartcols.x86_64 0:2.23.2-65.el7 will be installed
+---> Package libstdc++.x86_64 0:4.8.5-44.el7 will be installed
+---> Package libuser.x86_64 0:0.60-9.el7 will be installed
+---> Package libutempter.x86_64 0:1.1.6-4.el7 will be installed
+---> Package libverto.x86_64 0:0.2.5-4.el7 will be installed
+---> Package libverto-libevent.x86_64 0:0.2.5-4.el7 will be installed
+---> Package lz4.x86_64 0:1.8.3-1.el7 will be installed
+---> Package ncurses.x86_64 0:5.9-14.20130511.el7_4 will be installed
+---> Package ncurses-base.noarch 0:5.9-14.20130511.el7_4 will be installed
+---> Package nspr.x86_64 0:4.21.0-1.el7 will be installed
+---> Package nss-pem.x86_64 0:1.0.3-7.el7 will be installed
+---> Package nss-softokn.x86_64 0:3.44.0-8.el7_7 will be installed
+---> Package nss-softokn-freebl.x86_64 0:3.44.0-8.el7_7 will be installed
+---> Package nss-sysinit.x86_64 0:3.44.0-7.el7_7 will be installed
+---> Package nss-tools.x86_64 0:3.44.0-7.el7_7 will be installed
+---> Package nss-util.x86_64 0:3.44.0-4.el7_7 will be installed
+---> Package pkgconfig.x86_64 1:0.27.1-4.el7 will be installed
+---> Package python-libs.x86_64 0:2.7.5-89.el7 will be installed
+--> Processing Dependency: libgdbm_compat.so.4()(64bit) for package: python-libs-2.7.5-89.el7.x86_64
+--> Processing Dependency: libgdbm.so.4()(64bit) for package: python-libs-2.7.5-89.el7.x86_64
+---> Package qrencode-libs.x86_64 0:3.4.1-3.el7 will be installed
+---> Package quota-nls.noarch 1:4.01-19.el7 will be installed
+---> Package setup.noarch 0:2.8.71-11.el7 will be installed
+---> Package shared-mime-info.x86_64 0:1.8-5.el7 will be installed
+--> Processing Dependency: libxml2.so.2(LIBXML2_2.4.30)(64bit) for package: shared-mime-info-1.8-5.el7.x86_64
+--> Processing Dependency: libxml2.so.2()(64bit) for package: shared-mime-info-1.8-5.el7.x86_64
+---> Package systemd-sysv.x86_64 0:219-78.el7 will be installed
+---> Package sysvinit-tools.x86_64 0:2.88-14.dsf.el7 will be installed
+---> Package tcp_wrappers.x86_64 0:7.6-77.el7 will be installed
+--> Running transaction check
+---> Package dbus-libs.x86_64 1:1.10.24-15.el7 will be installed
+---> Package elfutils-default-yama-scope.noarch 0:0.176-5.el7 will be installed
+---> Package expat.x86_64 0:2.1.0-12.el7 will be installed
+---> Package gdbm.x86_64 0:1.10-8.el7 will be installed
+---> Package json-c.x86_64 0:0.11-4.el7_0 will be installed
+---> Package libnetfilter_conntrack.x86_64 0:1.0.6-1.el7_3 will be installed
+---> Package libnfnetlink.x86_64 0:1.0.1-4.el7 will be installed
+---> Package libpath_utils.x86_64 0:0.2.1-32.el7 will be installed
+---> Package libssh2.x86_64 0:1.8.0-4.el7 will be installed
+---> Package libxml2.x86_64 0:2.9.1-6.el7.5 will be installed
+---> Package p11-kit.x86_64 0:0.23.5-3.el7 will be installed
+---> Package p11-kit-trust.x86_64 0:0.23.5-3.el7 will be installed
+--> Processing Dependency: libtasn1.so.6(LIBTASN1_0_3)(64bit) for package: p11-kit-trust-0.23.5-3.el7.x86_64
+--> Processing Dependency: libtasn1.so.6()(64bit) for package: p11-kit-trust-0.23.5-3.el7.x86_64
+---> Package tzdata.noarch 0:2020a-1.el7 will be installed
+---> Package ustr.x86_64 0:1.0.4-16.el7 will be installed
+--> Running transaction check
+---> Package libtasn1.x86_64 0:4.10-1.el7 will be installed
+--> Finished Dependency Resolution
+Dependencies Resolved
+================================================================================
+ Package             Arch   Version                    Repository          Size
+================================================================================
+Installing:
+ bash                x86_64 4.2.46-34.el7              centos7.9-x86_64-0 1.0 M
+ bc                  x86_64 1.06.95-13.el7             centos7.9-x86_64-0 115 k
+ dhclient            x86_64 12:4.2.5-82.el7.centos     centos7.9-x86_64-0 286 k
+ dracut-network      x86_64 033-572.el7                centos7.9-x86_64-0 103 k
+ e2fsprogs           x86_64 1.42.9-19.el7              centos7.9-x86_64-0 701 k
+ ethtool             x86_64 2:4.8-10.el7               centos7.9-x86_64-0 127 k
+ gzip                x86_64 1.5-10.el7                 centos7.9-x86_64-0 130 k
+ iputils             x86_64 20160308-10.el7            centos7.9-x86_64-0 148 k
+ irqbalance          x86_64 3:1.0.7-12.el7             centos7.9-x86_64-0  45 k
+ kernel              x86_64 3.10.0-1160.el7            centos7.9-x86_64-0  50 M
+ net-tools           x86_64 2.0-0.25.20131004git.el7   centos7.9-x86_64-0 306 k
+ nfs-utils           x86_64 1:1.3.0-0.68.el7           centos7.9-x86_64-0 412 k
+ ntp                 x86_64 4.2.6p5-29.el7.centos.2    centos7.9-x86_64-0 549 k
+ openssh-clients     x86_64 7.4p1-21.el7               centos7.9-x86_64-0 655 k
+ openssh-server      x86_64 7.4p1-21.el7               centos7.9-x86_64-0 459 k
+ openssl             x86_64 1:1.0.2k-19.el7            centos7.9-x86_64-0 493 k
+ parted              x86_64 3.1-32.el7                 centos7.9-x86_64-0 609 k
+ procps-ng           x86_64 3.3.10-28.el7              centos7.9-x86_64-0 291 k
+ rpm                 x86_64 4.11.3-45.el7              centos7.9-x86_64-0 1.2 M
+ rsync               x86_64 3.1.2-10.el7               centos7.9-x86_64-0 404 k
+ rsyslog             x86_64 8.24.0-55.el7              centos7.9-x86_64-0 621 k
+ tar                 x86_64 2:1.26-35.el7              centos7.9-x86_64-0 846 k
+ vim-minimal         x86_64 2:7.4.629-7.el7            centos7.9-x86_64-0 443 k
+ wget                x86_64 1.14-18.el7_6.1            centos7.9-x86_64-0 547 k
+ xz                  x86_64 5.2.2-1.el7                centos7.9-x86_64-0 229 k
+Installing for dependencies:
+ acl                 x86_64 2.2.51-15.el7              centos7.9-x86_64-0  81 k
+ audit-libs          x86_64 2.8.5-4.el7                centos7.9-x86_64-0 102 k
+ autogen-libopts     x86_64 5.18-5.el7                 centos7.9-x86_64-0  66 k
+ basesystem          noarch 10.0-7.el7.centos          centos7.9-x86_64-0 5.0 k
+ bind-export-libs    x86_64 32:9.11.4-26.P2.el7        centos7.9-x86_64-0 1.1 M
+ binutils            x86_64 2.27-44.base.el7           centos7.9-x86_64-0 5.9 M
+ bzip2-libs          x86_64 1.0.6-13.el7               centos7.9-x86_64-0  40 k
+ ca-certificates     noarch 2020.2.41-70.0.el7_8       centos7.9-x86_64-0 382 k
+ centos-release      x86_64 7-9.2009.0.el7.centos      centos7.9-x86_64-0  27 k
+ chkconfig           x86_64 1.7.6-1.el7                centos7.9-x86_64-0 182 k
+ coreutils           x86_64 8.22-24.el7                centos7.9-x86_64-0 3.3 M
+ cpio                x86_64 2.11-28.el7                centos7.9-x86_64-0 211 k
+ cracklib            x86_64 2.9.0-11.el7               centos7.9-x86_64-0  80 k
+ cracklib-dicts      x86_64 2.9.0-11.el7               centos7.9-x86_64-0 3.6 M
+ cryptsetup-libs     x86_64 2.0.3-6.el7                centos7.9-x86_64-0 339 k
+ curl                x86_64 7.29.0-59.el7              centos7.9-x86_64-0 271 k
+ cyrus-sasl-lib      x86_64 2.1.26-23.el7              centos7.9-x86_64-0 155 k
+ dbus                x86_64 1:1.10.24-15.el7           centos7.9-x86_64-0 245 k
+ dbus-libs           x86_64 1:1.10.24-15.el7           centos7.9-x86_64-0 169 k
+ device-mapper       x86_64 7:1.02.170-6.el7           centos7.9-x86_64-0 297 k
+ device-mapper-libs  x86_64 7:1.02.170-6.el7           centos7.9-x86_64-0 325 k
+ dhcp-common         x86_64 12:4.2.5-82.el7.centos     centos7.9-x86_64-0 176 k
+ dhcp-libs           x86_64 12:4.2.5-82.el7.centos     centos7.9-x86_64-0 133 k
+ diffutils           x86_64 3.3-5.el7                  centos7.9-x86_64-0 322 k
+ dracut              x86_64 033-572.el7                centos7.9-x86_64-0 329 k
+ e2fsprogs-libs      x86_64 1.42.9-19.el7              centos7.9-x86_64-0 168 k
+ elfutils-default-yama-scope
+                     noarch 0.176-5.el7                centos7.9-x86_64-0  33 k
+ elfutils-libelf     x86_64 0.176-5.el7                centos7.9-x86_64-0 195 k
+ elfutils-libs       x86_64 0.176-5.el7                centos7.9-x86_64-0 291 k
+ expat               x86_64 2.1.0-12.el7               centos7.9-x86_64-0  81 k
+ filesystem          x86_64 3.2-25.el7                 centos7.9-x86_64-0 1.0 M
+ findutils           x86_64 1:4.5.11-6.el7             centos7.9-x86_64-0 559 k
+ fipscheck           x86_64 1.4.1-6.el7                centos7.9-x86_64-0  21 k
+ fipscheck-lib       x86_64 1.4.1-6.el7                centos7.9-x86_64-0  11 k
+ gawk                x86_64 4.0.2-4.el7_3.1            centos7.9-x86_64-0 874 k
+ gdbm                x86_64 1.10-8.el7                 centos7.9-x86_64-0  70 k
+ glib2               x86_64 2.56.1-7.el7               centos7.9-x86_64-0 2.5 M
+ glibc               x86_64 2.17-317.el7               centos7.9-x86_64-0 3.6 M
+ glibc-common        x86_64 2.17-317.el7               centos7.9-x86_64-0  11 M
+ gmp                 x86_64 1:6.0.0-15.el7             centos7.9-x86_64-0 281 k
+ grep                x86_64 2.20-3.el7                 centos7.9-x86_64-0 344 k
+ grubby              x86_64 8.28-26.el7                centos7.9-x86_64-0  71 k
+ gssproxy            x86_64 0.7.0-29.el7               centos7.9-x86_64-0 111 k
+ hardlink            x86_64 1:1.0-19.el7               centos7.9-x86_64-0  14 k
+ hostname            x86_64 3.13-3.el7_7.1             centos7.9-x86_64-0  17 k
+ info                x86_64 5.1-5.el7                  centos7.9-x86_64-0 233 k
+ initscripts         x86_64 9.49.53-1.el7              centos7.9-x86_64-0 440 k
+ iproute             x86_64 4.11.0-30.el7              centos7.9-x86_64-0 805 k
+ iptables            x86_64 1.4.21-35.el7              centos7.9-x86_64-0 432 k
+ json-c              x86_64 0.11-4.el7_0               centos7.9-x86_64-0  31 k
+ keyutils            x86_64 1.5.8-3.el7                centos7.9-x86_64-0  54 k
+ keyutils-libs       x86_64 1.5.8-3.el7                centos7.9-x86_64-0  25 k
+ kmod                x86_64 20-28.el7                  centos7.9-x86_64-0 123 k
+ kmod-libs           x86_64 20-28.el7                  centos7.9-x86_64-0  51 k
+ kpartx              x86_64 0.4.9-133.el7              centos7.9-x86_64-0  80 k
+ krb5-libs           x86_64 1.15.1-50.el7              centos7.9-x86_64-0 809 k
+ libacl              x86_64 2.2.51-15.el7              centos7.9-x86_64-0  27 k
+ libattr             x86_64 2.4.46-13.el7              centos7.9-x86_64-0  18 k
+ libbasicobjects     x86_64 0.1.1-32.el7               centos7.9-x86_64-0  26 k
+ libblkid            x86_64 2.23.2-65.el7              centos7.9-x86_64-0 183 k
+ libcap              x86_64 2.22-11.el7                centos7.9-x86_64-0  47 k
+ libcap-ng           x86_64 0.7.5-4.el7                centos7.9-x86_64-0  25 k
+ libcollection       x86_64 0.7.0-32.el7               centos7.9-x86_64-0  42 k
+ libcom_err          x86_64 1.42.9-19.el7              centos7.9-x86_64-0  42 k
+ libcurl             x86_64 7.29.0-59.el7              centos7.9-x86_64-0 223 k
+ libdb               x86_64 5.3.21-25.el7              centos7.9-x86_64-0 720 k
+ libdb-utils         x86_64 5.3.21-25.el7              centos7.9-x86_64-0 132 k
+ libedit             x86_64 3.0-12.20121213cvs.el7     centos7.9-x86_64-0  92 k
+ libestr             x86_64 0.1.9-2.el7                centos7.9-x86_64-0  20 k
+ libevent            x86_64 2.0.21-4.el7               centos7.9-x86_64-0 214 k
+ libfastjson         x86_64 0.99.4-3.el7               centos7.9-x86_64-0  27 k
+ libffi              x86_64 3.0.13-19.el7              centos7.9-x86_64-0  30 k
+ libgcc              x86_64 4.8.5-44.el7               centos7.9-x86_64-0 103 k
+ libgcrypt           x86_64 1.5.3-14.el7               centos7.9-x86_64-0 263 k
+ libgpg-error        x86_64 1.12-3.el7                 centos7.9-x86_64-0  87 k
+ libidn              x86_64 1.28-4.el7                 centos7.9-x86_64-0 209 k
+ libini_config       x86_64 1.3.1-32.el7               centos7.9-x86_64-0  64 k
+ libmnl              x86_64 1.0.3-7.el7                centos7.9-x86_64-0  23 k
+ libmount            x86_64 2.23.2-65.el7              centos7.9-x86_64-0 184 k
+ libnetfilter_conntrack
+                     x86_64 1.0.6-1.el7_3              centos7.9-x86_64-0  55 k
+ libnfnetlink        x86_64 1.0.1-4.el7                centos7.9-x86_64-0  26 k
+ libnfsidmap         x86_64 0.25-19.el7                centos7.9-x86_64-0  50 k
+ libpath_utils       x86_64 0.2.1-32.el7               centos7.9-x86_64-0  28 k
+ libpwquality        x86_64 1.2.3-5.el7                centos7.9-x86_64-0  85 k
+ libref_array        x86_64 0.1.5-32.el7               centos7.9-x86_64-0  27 k
+ libselinux          x86_64 2.5-15.el7                 centos7.9-x86_64-0 162 k
+ libsemanage         x86_64 2.5-14.el7                 centos7.9-x86_64-0 151 k
+ libsepol            x86_64 2.5-10.el7                 centos7.9-x86_64-0 297 k
+ libsmartcols        x86_64 2.23.2-65.el7              centos7.9-x86_64-0 142 k
+ libss               x86_64 1.42.9-19.el7              centos7.9-x86_64-0  47 k
+ libssh2             x86_64 1.8.0-4.el7                centos7.9-x86_64-0  88 k
+ libstdc++           x86_64 4.8.5-44.el7               centos7.9-x86_64-0 306 k
+ libtasn1            x86_64 4.10-1.el7                 centos7.9-x86_64-0 320 k
+ libtirpc            x86_64 0.2.4-0.16.el7             centos7.9-x86_64-0  89 k
+ libuser             x86_64 0.60-9.el7                 centos7.9-x86_64-0 400 k
+ libutempter         x86_64 1.1.6-4.el7                centos7.9-x86_64-0  25 k
+ libuuid             x86_64 2.23.2-65.el7              centos7.9-x86_64-0  84 k
+ libverto            x86_64 0.2.5-4.el7                centos7.9-x86_64-0  16 k
+ libverto-libevent   x86_64 0.2.5-4.el7                centos7.9-x86_64-0 8.9 k
+ libxml2             x86_64 2.9.1-6.el7.5              centos7.9-x86_64-0 668 k
+ linux-firmware      noarch 20200421-79.git78c0348.el7 centos7.9-x86_64-0  80 M
+ logrotate           x86_64 3.8.6-19.el7               centos7.9-x86_64-0  70 k
+ lua                 x86_64 5.1.4-15.el7               centos7.9-x86_64-0 201 k
+ lz4                 x86_64 1.8.3-1.el7                centos7.9-x86_64-0  85 k
+ make                x86_64 1:3.82-24.el7              centos7.9-x86_64-0 421 k
+ ncurses             x86_64 5.9-14.20130511.el7_4      centos7.9-x86_64-0 304 k
+ ncurses-base        noarch 5.9-14.20130511.el7_4      centos7.9-x86_64-0  68 k
+ ncurses-libs        x86_64 5.9-14.20130511.el7_4      centos7.9-x86_64-0 316 k
+ nspr                x86_64 4.21.0-1.el7               centos7.9-x86_64-0 127 k
+ nss                 x86_64 3.44.0-7.el7_7             centos7.9-x86_64-0 854 k
+ nss-pem             x86_64 1.0.3-7.el7                centos7.9-x86_64-0  74 k
+ nss-softokn         x86_64 3.44.0-8.el7_7             centos7.9-x86_64-0 330 k
+ nss-softokn-freebl  x86_64 3.44.0-8.el7_7             centos7.9-x86_64-0 224 k
+ nss-sysinit         x86_64 3.44.0-7.el7_7             centos7.9-x86_64-0  65 k
+ nss-tools           x86_64 3.44.0-7.el7_7             centos7.9-x86_64-0 528 k
+ nss-util            x86_64 3.44.0-4.el7_7             centos7.9-x86_64-0  79 k
+ ntpdate             x86_64 4.2.6p5-29.el7.centos.2    centos7.9-x86_64-0  87 k
+ numactl-libs        x86_64 2.0.12-5.el7               centos7.9-x86_64-0  30 k
+ openldap            x86_64 2.4.44-22.el7              centos7.9-x86_64-0 356 k
+ openssh             x86_64 7.4p1-21.el7               centos7.9-x86_64-0 510 k
+ openssl-libs        x86_64 1:1.0.2k-19.el7            centos7.9-x86_64-0 1.2 M
+ p11-kit             x86_64 0.23.5-3.el7               centos7.9-x86_64-0 252 k
+ p11-kit-trust       x86_64 0.23.5-3.el7               centos7.9-x86_64-0 129 k
+ pam                 x86_64 1.1.8-23.el7               centos7.9-x86_64-0 721 k
+ pcre                x86_64 8.32-17.el7                centos7.9-x86_64-0 422 k
+ pkgconfig           x86_64 1:0.27.1-4.el7             centos7.9-x86_64-0  54 k
+ popt                x86_64 1.13-16.el7                centos7.9-x86_64-0  42 k
+ python              x86_64 2.7.5-89.el7               centos7.9-x86_64-0  96 k
+ python-libs         x86_64 2.7.5-89.el7               centos7.9-x86_64-0 5.6 M
+ qrencode-libs       x86_64 3.4.1-3.el7                centos7.9-x86_64-0  50 k
+ quota               x86_64 1:4.01-19.el7              centos7.9-x86_64-0 179 k
+ quota-nls           noarch 1:4.01-19.el7              centos7.9-x86_64-0  90 k
+ readline            x86_64 6.2-11.el7                 centos7.9-x86_64-0 193 k
+ rpcbind             x86_64 0.2.0-49.el7               centos7.9-x86_64-0  60 k
+ rpm-libs            x86_64 4.11.3-45.el7              centos7.9-x86_64-0 278 k
+ sed                 x86_64 4.2.2-7.el7                centos7.9-x86_64-0 231 k
+ setup               noarch 2.8.71-11.el7              centos7.9-x86_64-0 166 k
+ shadow-utils        x86_64 2:4.6-5.el7                centos7.9-x86_64-0 1.2 M
+ shared-mime-info    x86_64 1.8-5.el7                  centos7.9-x86_64-0 312 k
+ sqlite              x86_64 3.7.17-8.el7_7.1           centos7.9-x86_64-0 394 k
+ systemd             x86_64 219-78.el7                 centos7.9-x86_64-0 5.1 M
+ systemd-libs        x86_64 219-78.el7                 centos7.9-x86_64-0 418 k
+ systemd-sysv        x86_64 219-78.el7                 centos7.9-x86_64-0  96 k
+ sysvinit-tools      x86_64 2.88-14.dsf.el7            centos7.9-x86_64-0  63 k
+ tcp_wrappers        x86_64 7.6-77.el7                 centos7.9-x86_64-0  78 k
+ tcp_wrappers-libs   x86_64 7.6-77.el7                 centos7.9-x86_64-0  66 k
+ tzdata              noarch 2020a-1.el7                centos7.9-x86_64-0 495 k
+ ustr                x86_64 1.0.4-16.el7               centos7.9-x86_64-0  92 k
+ util-linux          x86_64 2.23.2-65.el7              centos7.9-x86_64-0 2.0 M
+ xz-libs             x86_64 5.2.2-1.el7                centos7.9-x86_64-0 103 k
+ zlib                x86_64 1.2.7-18.el7               centos7.9-x86_64-0  90 k
+Transaction Summary
+================================================================================
+Install  25 Packages (+151 Dependent packages)
+Total download size: 214 M
+Installed size: 910 M
+Downloading packages:
+--------------------------------------------------------------------------------
+Total                                              416 MB/s | 214 MB  00:00
+Running transaction check
+Running transaction test
+Transaction test succeeded
+Running transaction
+  Installing : libgcc-4.8.5-44.el7.x86_64                                 1/176
+  Installing : centos-release-7-9.2009.0.el7.centos.x86_64                2/176
+  Installing : setup-2.8.71-11.el7.noarch                                 3/176
+  Installing : filesystem-3.2-25.el7.x86_64                               4/176
+  Installing : basesystem-10.0-7.el7.centos.noarch                        5/176
+  Installing : ncurses-base-5.9-14.20130511.el7_4.noarch                  6/176
+  Installing : tzdata-2020a-1.el7.noarch                                  7/176
+  Installing : nss-softokn-freebl-3.44.0-8.el7_7.x86_64                   8/176
+  Installing : glibc-common-2.17-317.el7.x86_64                           9/176
+  Installing : glibc-2.17-317.el7.x86_64                                 10/176
+  Installing : nspr-4.21.0-1.el7.x86_64                                  11/176
+  Installing : nss-util-3.44.0-4.el7_7.x86_64                            12/176
+  Installing : libstdc++-4.8.5-44.el7.x86_64                             13/176
+  Installing : ncurses-libs-5.9-14.20130511.el7_4.x86_64                 14/176
+  Installing : bash-4.2.46-34.el7.x86_64                                 15/176
+  Installing : libsepol-2.5-10.el7.x86_64                                16/176
+  Installing : pcre-8.32-17.el7.x86_64                                   17/176
+  Installing : libselinux-2.5-15.el7.x86_64                              18/176
+  Installing : zlib-1.2.7-18.el7.x86_64                                  19/176
+  Installing : info-5.1-5.el7.x86_64                                     20/176
+  Installing : libcom_err-1.42.9-19.el7.x86_64                           21/176
+  Installing : popt-1.13-16.el7.x86_64                                   22/176
+  Installing : xz-libs-5.2.2-1.el7.x86_64                                23/176
+  Installing : libuuid-2.23.2-65.el7.x86_64                              24/176
+  Installing : chkconfig-1.7.6-1.el7.x86_64                              25/176
+  Installing : sed-4.2.2-7.el7.x86_64                                    26/176
+  Installing : libdb-5.3.21-25.el7.x86_64                                27/176
+  Installing : grep-2.20-3.el7.x86_64                                    28/176
+  Installing : bzip2-libs-1.0.6-13.el7.x86_64                            29/176
+  Installing : libattr-2.4.46-13.el7.x86_64                              30/176
+  Installing : libcap-2.22-11.el7.x86_64                                 31/176
+  Installing : libacl-2.2.51-15.el7.x86_64                               32/176
+  Installing : readline-6.2-11.el7.x86_64                                33/176
+  Installing : gawk-4.0.2-4.el7_3.1.x86_64                               34/176
+  Installing : tcp_wrappers-libs-7.6-77.el7.x86_64                       35/176
+  Installing : libcap-ng-0.7.5-4.el7.x86_64                              36/176
+  Installing : audit-libs-2.8.5-4.el7.x86_64                             37/176
+  Installing : elfutils-libelf-0.176-5.el7.x86_64                        38/176
+  Installing : keyutils-libs-1.5.8-3.el7.x86_64                          39/176
+  Installing : libffi-3.0.13-19.el7.x86_64                               40/176
+  Installing : sqlite-3.7.17-8.el7_7.1.x86_64                            41/176
+  Installing : 1:findutils-4.5.11-6.el7.x86_64                           42/176
+  Installing : libidn-1.28-4.el7.x86_64                                  43/176
+  Installing : cpio-2.11-28.el7.x86_64                                   44/176
+  Installing : libverto-0.2.5-4.el7.x86_64                               45/176
+  Installing : libgpg-error-1.12-3.el7.x86_64                            46/176
+  Installing : libgcrypt-1.5.3-14.el7.x86_64                             47/176
+  Installing : nss-softokn-3.44.0-8.el7_7.x86_64                         48/176
+  Installing : p11-kit-0.23.5-3.el7.x86_64                               49/176
+  Installing : lua-5.1.4-15.el7.x86_64                                   50/176
+  Installing : xz-5.2.2-1.el7.x86_64                                     51/176
+  Installing : e2fsprogs-libs-1.42.9-19.el7.x86_64                       52/176
+  Installing : diffutils-3.3-5.el7.x86_64                                53/176
+  Installing : libedit-3.0-12.20121213cvs.el7.x86_64                     54/176
+  Installing : libnfnetlink-1.0.1-4.el7.x86_64                           55/176
+  Installing : libbasicobjects-0.1.1-32.el7.x86_64                       56/176
+  Installing : libref_array-0.1.5-32.el7.x86_64                          57/176
+  Installing : libmnl-1.0.3-7.el7.x86_64                                 58/176
+  Installing : expat-2.1.0-12.el7.x86_64                                 59/176
+  Installing : hostname-3.13-3.el7_7.1.x86_64                            60/176
+  Installing : lz4-1.8.3-1.el7.x86_64                                    61/176
+  Installing : libcollection-0.7.0-32.el7.x86_64                         62/176
+  Installing : libnetfilter_conntrack-1.0.6-1.el7_3.x86_64               63/176
+  Installing : iptables-1.4.21-35.el7.x86_64                             64/176
+  Installing : iproute-4.11.0-30.el7.x86_64                              65/176
+  Installing : keyutils-1.5.8-3.el7.x86_64                               66/176
+  Installing : tcp_wrappers-7.6-77.el7.x86_64                            67/176
+  Installing : bc-1.06.95-13.el7.x86_64                                  68/176
+  Installing : acl-2.2.51-15.el7.x86_64                                  69/176
+  Installing : 2:tar-1.26-35.el7.x86_64                                  70/176
+  Installing : libdb-utils-5.3.21-25.el7.x86_64                          71/176
+  Installing : kmod-libs-20-28.el7.x86_64                                72/176
+  Installing : libxml2-2.9.1-6.el7.5.x86_64                              73/176
+  Installing : libss-1.42.9-19.el7.x86_64                                74/176
+  Installing : 1:make-3.82-24.el7.x86_64                                 75/176
+  Installing : linux-firmware-20200421-79.git78c0348.el7.noarch          76/176
+  Installing : ncurses-5.9-14.20130511.el7_4.x86_64                      77/176
+  Installing : 1:gmp-6.0.0-15.el7.x86_64                                 78/176
+  Installing : sysvinit-tools-2.88-14.dsf.el7.x86_64                     79/176
+  Installing : libpath_utils-0.2.1-32.el7.x86_64                         80/176
+  Installing : libini_config-1.3.1-32.el7.x86_64                         81/176
+  Installing : ustr-1.0.4-16.el7.x86_64                                  82/176
+  Installing : libsemanage-2.5-14.el7.x86_64                             83/176
+  Installing : autogen-libopts-5.18-5.el7.x86_64                         84/176
+  Installing : libtasn1-4.10-1.el7.x86_64                                85/176
+  Installing : p11-kit-trust-0.23.5-3.el7.x86_64                         86/176
+  Installing : ca-certificates-2020.2.41-70.0.el7_8.noarch               87/176
+  Installing : 1:openssl-libs-1.0.2k-19.el7.x86_64                       88/176
+  Installing : coreutils-8.22-24.el7.x86_64                              89/176
+  Installing : krb5-libs-1.15.1-50.el7.x86_64                            90/176
+  Installing : libblkid-2.23.2-65.el7.x86_64                             91/176
+  Installing : 2:shadow-utils-4.6-5.el7.x86_64                           92/176
+  Installing : libmount-2.23.2-65.el7.x86_64                             93/176
+  Installing : glib2-2.56.1-7.el7.x86_64                                 94/176
+  Installing : shared-mime-info-1.8-5.el7.x86_64                         95/176
+  Installing : gzip-1.5-10.el7.x86_64                                    96/176
+  Installing : cracklib-2.9.0-11.el7.x86_64                              97/176
+  Installing : cracklib-dicts-2.9.0-11.el7.x86_64                        98/176
+  Installing : pam-1.1.8-23.el7.x86_64                                   99/176
+  Installing : libpwquality-1.2.3-5.el7.x86_64                          100/176
+  Installing : libtirpc-0.2.4-0.16.el7.x86_64                           101/176
+  Installing : libevent-2.0.21-4.el7.x86_64                             102/176
+  Installing : libverto-libevent-0.2.5-4.el7.x86_64                     103/176
+  Installing : 1:pkgconfig-0.27.1-4.el7.x86_64                          104/176
+  Installing : libutempter-1.1.6-4.el7.x86_64                           105/176
+  Installing : grubby-8.28-26.el7.x86_64                                106/176
+  Installing : 32:bind-export-libs-9.11.4-26.P2.el7.x86_64              107/176
+  Installing : cyrus-sasl-lib-2.1.26-23.el7.x86_64                      108/176
+  Installing : nss-pem-1.0.3-7.el7.x86_64                               109/176
+  Installing : nss-3.44.0-7.el7_7.x86_64                                110/176
+  Installing : nss-sysinit-3.44.0-7.el7_7.x86_64                        111/176
+  Installing : nss-tools-3.44.0-7.el7_7.x86_64                          112/176
+  Installing : binutils-2.27-44.base.el7.x86_64                         113/176
+  Installing : logrotate-3.8.6-19.el7.x86_64                            114/176
+  Installing : libssh2-1.8.0-4.el7.x86_64                               115/176
+  Installing : libcurl-7.29.0-59.el7.x86_64                             116/176
+  Installing : curl-7.29.0-59.el7.x86_64                                117/176
+  Installing : rpm-libs-4.11.3-45.el7.x86_64                            118/176
+  Installing : rpm-4.11.3-45.el7.x86_64                                 119/176
+  Installing : openldap-2.4.44-22.el7.x86_64                            120/176
+  Installing : libnfsidmap-0.25-19.el7.x86_64                           121/176
+  Installing : libuser-0.60-9.el7.x86_64                                122/176
+  Installing : fipscheck-1.4.1-6.el7.x86_64                             123/176
+  Installing : fipscheck-lib-1.4.1-6.el7.x86_64                         124/176
+  Installing : qrencode-libs-3.4.1-3.el7.x86_64                         125/176
+  Installing : libfastjson-0.99.4-3.el7.x86_64                          126/176
+  Installing : gdbm-1.10-8.el7.x86_64                                   127/176
+  Installing : python-libs-2.7.5-89.el7.x86_64                          128/176
+  Installing : python-2.7.5-89.el7.x86_64                               129/176
+  Installing : libestr-0.1.9-2.el7.x86_64                               130/176
+  Installing : 1:hardlink-1.0-19.el7.x86_64                             131/176
+  Installing : json-c-0.11-4.el7_0.x86_64                               132/176
+  Installing : libsmartcols-2.23.2-65.el7.x86_64                        133/176
+  Installing : procps-ng-3.3.10-28.el7.x86_64                           134/176
+  Installing : 7:device-mapper-1.02.170-6.el7.x86_64                    135/176
+  Installing : kpartx-0.4.9-133.el7.x86_64                              136/176
+  Installing : util-linux-2.23.2-65.el7.x86_64                          137/176
+  Installing : 7:device-mapper-libs-1.02.170-6.el7.x86_64               138/176
+  Installing : cryptsetup-libs-2.0.3-6.el7.x86_64                       139/176
+  Installing : dracut-033-572.el7.x86_64                                140/176
+  Installing : kmod-20-28.el7.x86_64                                    141/176
+  Installing : elfutils-libs-0.176-5.el7.x86_64                         142/176
+  Installing : systemd-libs-219-78.el7.x86_64                           143/176
+  Installing : 1:dbus-libs-1.10.24-15.el7.x86_64                        144/176
+  Installing : systemd-219-78.el7.x86_64                                145/176
+Running in chroot, ignoring request.
+  Installing : elfutils-default-yama-scope-0.176-5.el7.noarch           146/176
+  Installing : 1:dbus-1.10.24-15.el7.x86_64                             147/176
+  Installing : iputils-20160308-10.el7.x86_64                           148/176
+  Installing : initscripts-9.49.53-1.el7.x86_64                         149/176
+  Installing : 12:dhcp-libs-4.2.5-82.el7.centos.x86_64                  150/176
+  Installing : openssh-7.4p1-21.el7.x86_64                              151/176
+  Installing : 12:dhcp-common-4.2.5-82.el7.centos.x86_64                152/176
+  Installing : 12:dhclient-4.2.5-82.el7.centos.x86_64                   153/176
+  Installing : ntpdate-4.2.6p5-29.el7.centos.2.x86_64                   154/176
+  Installing : gssproxy-0.7.0-29.el7.x86_64                             155/176
+  Installing : systemd-sysv-219-78.el7.x86_64                           156/176
+  Installing : rpcbind-0.2.0-49.el7.x86_64                              157/176
+  Installing : numactl-libs-2.0.12-5.el7.x86_64                         158/176
+  Installing : 1:quota-nls-4.01-19.el7.noarch                           159/176
+  Installing : 1:quota-4.01-19.el7.x86_64                               160/176
+  Installing : 1:nfs-utils-1.3.0-0.68.el7.x86_64                        161/176
+  Installing : 3:irqbalance-1.0.7-12.el7.x86_64                         162/176
+  Installing : ntp-4.2.6p5-29.el7.centos.2.x86_64                       163/176
+  Installing : dracut-network-033-572.el7.x86_64                        164/176
+  Installing : openssh-server-7.4p1-21.el7.x86_64                       165/176
+  Installing : openssh-clients-7.4p1-21.el7.x86_64                      166/176
+  Installing : kernel-3.10.0-1160.el7.x86_64                            167/176
+  Installing : rsyslog-8.24.0-55.el7.x86_64                             168/176
+  Installing : rsync-3.1.2-10.el7.x86_64                                169/176
+  Installing : net-tools-2.0-0.25.20131004git.el7.x86_64                170/176
+  Installing : parted-3.1-32.el7.x86_64                                 171/176
+  Installing : e2fsprogs-1.42.9-19.el7.x86_64                           172/176
+  Installing : 1:openssl-1.0.2k-19.el7.x86_64                           173/176
+  Installing : wget-1.14-18.el7_6.1.x86_64                              174/176
+  Installing : 2:vim-minimal-7.4.629-7.el7.x86_64                       175/176
+  Installing : 2:ethtool-4.8-10.el7.x86_64                              176/176
+Turning off host-only mode: '/run' is not mounted!
+Turning off host-only mode: '/dev' is not mounted!
+  Verifying  : fipscheck-lib-1.4.1-6.el7.x86_64                           1/176
+  Verifying  : rpm-4.11.3-45.el7.x86_64                                   2/176
+  Verifying  : acl-2.2.51-15.el7.x86_64                                   3/176
+  Verifying  : 1:pkgconfig-0.27.1-4.el7.x86_64                            4/176
+  Verifying  : libacl-2.2.51-15.el7.x86_64                                5/176
+  Verifying  : libdb-utils-5.3.21-25.el7.x86_64                           6/176
+  Verifying  : libcap-2.22-11.el7.x86_64                                  7/176
+  Verifying  : nss-3.44.0-7.el7_7.x86_64                                  8/176
+  Verifying  : pcre-8.32-17.el7.x86_64                                    9/176
+  Verifying  : sysvinit-tools-2.88-14.dsf.el7.x86_64                     10/176
+  Verifying  : glib2-2.56.1-7.el7.x86_64                                 11/176
+  Verifying  : readline-6.2-11.el7.x86_64                                12/176
+  Verifying  : sqlite-3.7.17-8.el7_7.1.x86_64                            13/176
+  Verifying  : zlib-1.2.7-18.el7.x86_64                                  14/176
+  Verifying  : nss-pem-1.0.3-7.el7.x86_64                                15/176
+  Verifying  : systemd-219-78.el7.x86_64                                 16/176
+  Verifying  : grubby-8.28-26.el7.x86_64                                 17/176
+  Verifying  : 7:device-mapper-1.02.170-6.el7.x86_64                     18/176
+  Verifying  : openssh-server-7.4p1-21.el7.x86_64                        19/176
+  Verifying  : 1:findutils-4.5.11-6.el7.x86_64                           20/176
+  Verifying  : libselinux-2.5-15.el7.x86_64                              21/176
+  Verifying  : libblkid-2.23.2-65.el7.x86_64                             22/176
+  Verifying  : python-libs-2.7.5-89.el7.x86_64                           23/176
+  Verifying  : rpm-libs-4.11.3-45.el7.x86_64                             24/176
+  Verifying  : kmod-libs-20-28.el7.x86_64                                25/176
+  Verifying  : 12:dhcp-libs-4.2.5-82.el7.centos.x86_64                   26/176
+  Verifying  : 1:openssl-libs-1.0.2k-19.el7.x86_64                       27/176
+  Verifying  : iptables-1.4.21-35.el7.x86_64                             28/176
+  Verifying  : ntpdate-4.2.6p5-29.el7.centos.2.x86_64                    29/176
+  Verifying  : procps-ng-3.3.10-28.el7.x86_64                            30/176
+  Verifying  : libpath_utils-0.2.1-32.el7.x86_64                         31/176
+  Verifying  : libnfnetlink-1.0.1-4.el7.x86_64                           32/176
+  Verifying  : cracklib-dicts-2.9.0-11.el7.x86_64                        33/176
+  Verifying  : tcp_wrappers-libs-7.6-77.el7.x86_64                       34/176
+  Verifying  : elfutils-libs-0.176-5.el7.x86_64                          35/176
+  Verifying  : libedit-3.0-12.20121213cvs.el7.x86_64                     36/176
+  Verifying  : libini_config-1.3.1-32.el7.x86_64                         37/176
+  Verifying  : ca-certificates-2020.2.41-70.0.el7_8.noarch               38/176
+  Verifying  : ustr-1.0.4-16.el7.x86_64                                  39/176
+  Verifying  : lua-5.1.4-15.el7.x86_64                                   40/176
+  Verifying  : libgcc-4.8.5-44.el7.x86_64                                41/176
+  Verifying  : libutempter-1.1.6-4.el7.x86_64                            42/176
+  Verifying  : ntp-4.2.6p5-29.el7.centos.2.x86_64                        43/176
+  Verifying  : libuuid-2.23.2-65.el7.x86_64                              44/176
+  Verifying  : 2:vim-minimal-7.4.629-7.el7.x86_64                        45/176
+  Verifying  : setup-2.8.71-11.el7.noarch                                46/176
+  Verifying  : nss-tools-3.44.0-7.el7_7.x86_64                           47/176
+  Verifying  : kernel-3.10.0-1160.el7.x86_64                             48/176
+  Verifying  : autogen-libopts-5.18-5.el7.x86_64                         49/176
+  Verifying  : ncurses-libs-5.9-14.20130511.el7_4.x86_64                 50/176
+  Verifying  : chkconfig-1.7.6-1.el7.x86_64                              51/176
+  Verifying  : e2fsprogs-1.42.9-19.el7.x86_64                            52/176
+  Verifying  : pam-1.1.8-23.el7.x86_64                                   53/176
+  Verifying  : 12:dhclient-4.2.5-82.el7.centos.x86_64                    54/176
+  Verifying  : bzip2-libs-1.0.6-13.el7.x86_64                            55/176
+  Verifying  : libbasicobjects-0.1.1-32.el7.x86_64                       56/176
+  Verifying  : dracut-033-572.el7.x86_64                                 57/176
+  Verifying  : 1:dbus-libs-1.10.24-15.el7.x86_64                         58/176
+  Verifying  : nss-sysinit-3.44.0-7.el7_7.x86_64                         59/176
+  Verifying  : cryptsetup-libs-2.0.3-6.el7.x86_64                        60/176
+  Verifying  : libverto-libevent-0.2.5-4.el7.x86_64                      61/176
+  Verifying  : basesystem-10.0-7.el7.centos.noarch                       62/176
+  Verifying  : libverto-0.2.5-4.el7.x86_64                               63/176
+  Verifying  : rpcbind-0.2.0-49.el7.x86_64                               64/176
+  Verifying  : 1:make-3.82-24.el7.x86_64                                 65/176
+  Verifying  : info-5.1-5.el7.x86_64                                     66/176
+  Verifying  : initscripts-9.49.53-1.el7.x86_64                          67/176
+  Verifying  : 32:bind-export-libs-9.11.4-26.P2.el7.x86_64               68/176
+  Verifying  : rsyslog-8.24.0-55.el7.x86_64                              69/176
+  Verifying  : e2fsprogs-libs-1.42.9-19.el7.x86_64                       70/176
+  Verifying  : iputils-20160308-10.el7.x86_64                            71/176
+  Verifying  : openssh-clients-7.4p1-21.el7.x86_64                       72/176
+  Verifying  : 1:openssl-1.0.2k-19.el7.x86_64                            73/176
+  Verifying  : libsepol-2.5-10.el7.x86_64                                74/176
+  Verifying  : gssproxy-0.7.0-29.el7.x86_64                              75/176
+  Verifying  : libref_array-0.1.5-32.el7.x86_64                          76/176
+  Verifying  : 1:quota-nls-4.01-19.el7.noarch                            77/176
+  Verifying  : tzdata-2020a-1.el7.noarch                                 78/176
+  Verifying  : libcurl-7.29.0-59.el7.x86_64                              79/176
+  Verifying  : libssh2-1.8.0-4.el7.x86_64                                80/176
+  Verifying  : curl-7.29.0-59.el7.x86_64                                 81/176
+  Verifying  : libnfsidmap-0.25-19.el7.x86_64                            82/176
+  Verifying  : libuser-0.60-9.el7.x86_64                                 83/176
+  Verifying  : libtasn1-4.10-1.el7.x86_64                                84/176
+  Verifying  : keyutils-1.5.8-3.el7.x86_64                               85/176
+  Verifying  : rsync-3.1.2-10.el7.x86_64                                 86/176
+  Verifying  : cracklib-2.9.0-11.el7.x86_64                              87/176
+  Verifying  : libgpg-error-1.12-3.el7.x86_64                            88/176
+  Verifying  : nspr-4.21.0-1.el7.x86_64                                  89/176
+  Verifying  : parted-3.1-32.el7.x86_64                                  90/176
+  Verifying  : nss-softokn-3.44.0-8.el7_7.x86_64                         91/176
+  Verifying  : libmnl-1.0.3-7.el7.x86_64                                 92/176
+  Verifying  : popt-1.13-16.el7.x86_64                                   93/176
+  Verifying  : gzip-1.5-10.el7.x86_64                                    94/176
+  Verifying  : p11-kit-0.23.5-3.el7.x86_64                               95/176
+  Verifying  : 2:shadow-utils-4.6-5.el7.x86_64                           96/176
+  Verifying  : qrencode-libs-3.4.1-3.el7.x86_64                          97/176
+  Verifying  : 1:nfs-utils-1.3.0-0.68.el7.x86_64                         98/176
+  Verifying  : expat-2.1.0-12.el7.x86_64                                 99/176
+  Verifying  : binutils-2.27-44.base.el7.x86_64                         100/176
+  Verifying  : bc-1.06.95-13.el7.x86_64                                 101/176
+  Verifying  : libidn-1.28-4.el7.x86_64                                 102/176
+  Verifying  : gawk-4.0.2-4.el7_3.1.x86_64                              103/176
+  Verifying  : audit-libs-2.8.5-4.el7.x86_64                            104/176
+  Verifying  : libxml2-2.9.1-6.el7.5.x86_64                             105/176
+  Verifying  : glibc-2.17-317.el7.x86_64                                106/176
+  Verifying  : centos-release-7-9.2009.0.el7.centos.x86_64              107/176
+  Verifying  : libfastjson-0.99.4-3.el7.x86_64                          108/176
+  Verifying  : systemd-libs-219-78.el7.x86_64                           109/176
+  Verifying  : glibc-common-2.17-317.el7.x86_64                         110/176
+  Verifying  : kmod-20-28.el7.x86_64                                    111/176
+  Verifying  : grep-2.20-3.el7.x86_64                                   112/176
+  Verifying  : openldap-2.4.44-22.el7.x86_64                            113/176
+  Verifying  : hostname-3.13-3.el7_7.1.x86_64                           114/176
+  Verifying  : filesystem-3.2-25.el7.x86_64                             115/176
+  Verifying  : libdb-5.3.21-25.el7.x86_64                               116/176
+  Verifying  : 7:device-mapper-libs-1.02.170-6.el7.x86_64               117/176
+  Verifying  : dracut-network-033-572.el7.x86_64                        118/176
+  Verifying  : libevent-2.0.21-4.el7.x86_64                             119/176
+  Verifying  : libsemanage-2.5-14.el7.x86_64                            120/176
+  Verifying  : gdbm-1.10-8.el7.x86_64                                   121/176
+  Verifying  : libestr-0.1.9-2.el7.x86_64                               122/176
+  Verifying  : util-linux-2.23.2-65.el7.x86_64                          123/176
+  Verifying  : coreutils-8.22-24.el7.x86_64                             124/176
+  Verifying  : linux-firmware-20200421-79.git78c0348.el7.noarch         125/176
+  Verifying  : diffutils-3.3-5.el7.x86_64                               126/176
+  Verifying  : xz-libs-5.2.2-1.el7.x86_64                               127/176
+  Verifying  : python-2.7.5-89.el7.x86_64                               128/176
+  Verifying  : bash-4.2.46-34.el7.x86_64                                129/176
+  Verifying  : 1:quota-4.01-19.el7.x86_64                               130/176
+  Verifying  : libstdc++-4.8.5-44.el7.x86_64                            131/176
+  Verifying  : logrotate-3.8.6-19.el7.x86_64                            132/176
+  Verifying  : tcp_wrappers-7.6-77.el7.x86_64                           133/176
+  Verifying  : ncurses-5.9-14.20130511.el7_4.x86_64                     134/176
+  Verifying  : wget-1.14-18.el7_6.1.x86_64                              135/176
+  Verifying  : ncurses-base-5.9-14.20130511.el7_4.noarch                136/176
+  Verifying  : elfutils-default-yama-scope-0.176-5.el7.noarch           137/176
+  Verifying  : libtirpc-0.2.4-0.16.el7.x86_64                           138/176
+  Verifying  : lz4-1.8.3-1.el7.x86_64                                   139/176
+  Verifying  : 2:ethtool-4.8-10.el7.x86_64                              140/176
+  Verifying  : 2:tar-1.26-35.el7.x86_64                                 141/176
+  Verifying  : libnetfilter_conntrack-1.0.6-1.el7_3.x86_64              142/176
+  Verifying  : krb5-libs-1.15.1-50.el7.x86_64                           143/176
+  Verifying  : keyutils-libs-1.5.8-3.el7.x86_64                         144/176
+  Verifying  : 1:hardlink-1.0-19.el7.x86_64                             145/176
+  Verifying  : openssh-7.4p1-21.el7.x86_64                              146/176
+  Verifying  : libattr-2.4.46-13.el7.x86_64                             147/176
+  Verifying  : kpartx-0.4.9-133.el7.x86_64                              148/176
+  Verifying  : 1:dbus-1.10.24-15.el7.x86_64                             149/176
+  Verifying  : libcom_err-1.42.9-19.el7.x86_64                          150/176
+  Verifying  : net-tools-2.0-0.25.20131004git.el7.x86_64                151/176
+  Verifying  : shared-mime-info-1.8-5.el7.x86_64                        152/176
+  Verifying  : iproute-4.11.0-30.el7.x86_64                             153/176
+  Verifying  : fipscheck-1.4.1-6.el7.x86_64                             154/176
+  Verifying  : json-c-0.11-4.el7_0.x86_64                               155/176
+  Verifying  : libsmartcols-2.23.2-65.el7.x86_64                        156/176
+  Verifying  : xz-5.2.2-1.el7.x86_64                                    157/176
+  Verifying  : 12:dhcp-common-4.2.5-82.el7.centos.x86_64                158/176
+  Verifying  : libcap-ng-0.7.5-4.el7.x86_64                             159/176
+  Verifying  : 1:gmp-6.0.0-15.el7.x86_64                                160/176
+  Verifying  : libcollection-0.7.0-32.el7.x86_64                        161/176
+  Verifying  : p11-kit-trust-0.23.5-3.el7.x86_64                        162/176
+  Verifying  : nss-softokn-freebl-3.44.0-8.el7_7.x86_64                 163/176
+  Verifying  : sed-4.2.2-7.el7.x86_64                                   164/176
+  Verifying  : libgcrypt-1.5.3-14.el7.x86_64                            165/176
+  Verifying  : libss-1.42.9-19.el7.x86_64                               166/176
+  Verifying  : cpio-2.11-28.el7.x86_64                                  167/176
+  Verifying  : 3:irqbalance-1.0.7-12.el7.x86_64                         168/176
+  Verifying  : systemd-sysv-219-78.el7.x86_64                           169/176
+  Verifying  : numactl-libs-2.0.12-5.el7.x86_64                         170/176
+  Verifying  : libpwquality-1.2.3-5.el7.x86_64                          171/176
+  Verifying  : nss-util-3.44.0-4.el7_7.x86_64                           172/176
+  Verifying  : cyrus-sasl-lib-2.1.26-23.el7.x86_64                      173/176
+  Verifying  : elfutils-libelf-0.176-5.el7.x86_64                       174/176
+  Verifying  : libmount-2.23.2-65.el7.x86_64                            175/176
+  Verifying  : libffi-3.0.13-19.el7.x86_64                              176/176
+Installed:
+  bash.x86_64 0:4.2.46-34.el7
+  bc.x86_64 0:1.06.95-13.el7
+  dhclient.x86_64 12:4.2.5-82.el7.centos
+  dracut-network.x86_64 0:033-572.el7
+  e2fsprogs.x86_64 0:1.42.9-19.el7
+  ethtool.x86_64 2:4.8-10.el7
+  gzip.x86_64 0:1.5-10.el7
+  iputils.x86_64 0:20160308-10.el7
+  irqbalance.x86_64 3:1.0.7-12.el7
+  kernel.x86_64 0:3.10.0-1160.el7
+  net-tools.x86_64 0:2.0-0.25.20131004git.el7
+  nfs-utils.x86_64 1:1.3.0-0.68.el7
+  ntp.x86_64 0:4.2.6p5-29.el7.centos.2
+  openssh-clients.x86_64 0:7.4p1-21.el7
+  openssh-server.x86_64 0:7.4p1-21.el7
+  openssl.x86_64 1:1.0.2k-19.el7
+  parted.x86_64 0:3.1-32.el7
+  procps-ng.x86_64 0:3.3.10-28.el7
+  rpm.x86_64 0:4.11.3-45.el7
+  rsync.x86_64 0:3.1.2-10.el7
+  rsyslog.x86_64 0:8.24.0-55.el7
+  tar.x86_64 2:1.26-35.el7
+  vim-minimal.x86_64 2:7.4.629-7.el7
+  wget.x86_64 0:1.14-18.el7_6.1
+  xz.x86_64 0:5.2.2-1.el7
+Dependency Installed:
+  acl.x86_64 0:2.2.51-15.el7
+  audit-libs.x86_64 0:2.8.5-4.el7
+  autogen-libopts.x86_64 0:5.18-5.el7
+  basesystem.noarch 0:10.0-7.el7.centos
+  bind-export-libs.x86_64 32:9.11.4-26.P2.el7
+  binutils.x86_64 0:2.27-44.base.el7
+  bzip2-libs.x86_64 0:1.0.6-13.el7
+  ca-certificates.noarch 0:2020.2.41-70.0.el7_8
+  centos-release.x86_64 0:7-9.2009.0.el7.centos
+  chkconfig.x86_64 0:1.7.6-1.el7
+  coreutils.x86_64 0:8.22-24.el7
+  cpio.x86_64 0:2.11-28.el7
+  cracklib.x86_64 0:2.9.0-11.el7
+  cracklib-dicts.x86_64 0:2.9.0-11.el7
+  cryptsetup-libs.x86_64 0:2.0.3-6.el7
+  curl.x86_64 0:7.29.0-59.el7
+  cyrus-sasl-lib.x86_64 0:2.1.26-23.el7
+  dbus.x86_64 1:1.10.24-15.el7
+  dbus-libs.x86_64 1:1.10.24-15.el7
+  device-mapper.x86_64 7:1.02.170-6.el7
+  device-mapper-libs.x86_64 7:1.02.170-6.el7
+  dhcp-common.x86_64 12:4.2.5-82.el7.centos
+  dhcp-libs.x86_64 12:4.2.5-82.el7.centos
+  diffutils.x86_64 0:3.3-5.el7
+  dracut.x86_64 0:033-572.el7
+  e2fsprogs-libs.x86_64 0:1.42.9-19.el7
+  elfutils-default-yama-scope.noarch 0:0.176-5.el7
+  elfutils-libelf.x86_64 0:0.176-5.el7
+  elfutils-libs.x86_64 0:0.176-5.el7
+  expat.x86_64 0:2.1.0-12.el7
+  filesystem.x86_64 0:3.2-25.el7
+  findutils.x86_64 1:4.5.11-6.el7
+  fipscheck.x86_64 0:1.4.1-6.el7
+  fipscheck-lib.x86_64 0:1.4.1-6.el7
+  gawk.x86_64 0:4.0.2-4.el7_3.1
+  gdbm.x86_64 0:1.10-8.el7
+  glib2.x86_64 0:2.56.1-7.el7
+  glibc.x86_64 0:2.17-317.el7
+  glibc-common.x86_64 0:2.17-317.el7
+  gmp.x86_64 1:6.0.0-15.el7
+  grep.x86_64 0:2.20-3.el7
+  grubby.x86_64 0:8.28-26.el7
+  gssproxy.x86_64 0:0.7.0-29.el7
+  hardlink.x86_64 1:1.0-19.el7
+  hostname.x86_64 0:3.13-3.el7_7.1
+  info.x86_64 0:5.1-5.el7
+  initscripts.x86_64 0:9.49.53-1.el7
+  iproute.x86_64 0:4.11.0-30.el7
+  iptables.x86_64 0:1.4.21-35.el7
+  json-c.x86_64 0:0.11-4.el7_0
+  keyutils.x86_64 0:1.5.8-3.el7
+  keyutils-libs.x86_64 0:1.5.8-3.el7
+  kmod.x86_64 0:20-28.el7
+  kmod-libs.x86_64 0:20-28.el7
+  kpartx.x86_64 0:0.4.9-133.el7
+  krb5-libs.x86_64 0:1.15.1-50.el7
+  libacl.x86_64 0:2.2.51-15.el7
+  libattr.x86_64 0:2.4.46-13.el7
+  libbasicobjects.x86_64 0:0.1.1-32.el7
+  libblkid.x86_64 0:2.23.2-65.el7
+  libcap.x86_64 0:2.22-11.el7
+  libcap-ng.x86_64 0:0.7.5-4.el7
+  libcollection.x86_64 0:0.7.0-32.el7
+  libcom_err.x86_64 0:1.42.9-19.el7
+  libcurl.x86_64 0:7.29.0-59.el7
+  libdb.x86_64 0:5.3.21-25.el7
+  libdb-utils.x86_64 0:5.3.21-25.el7
+  libedit.x86_64 0:3.0-12.20121213cvs.el7
+  libestr.x86_64 0:0.1.9-2.el7
+  libevent.x86_64 0:2.0.21-4.el7
+  libfastjson.x86_64 0:0.99.4-3.el7
+  libffi.x86_64 0:3.0.13-19.el7
+  libgcc.x86_64 0:4.8.5-44.el7
+  libgcrypt.x86_64 0:1.5.3-14.el7
+  libgpg-error.x86_64 0:1.12-3.el7
+  libidn.x86_64 0:1.28-4.el7
+  libini_config.x86_64 0:1.3.1-32.el7
+  libmnl.x86_64 0:1.0.3-7.el7
+  libmount.x86_64 0:2.23.2-65.el7
+  libnetfilter_conntrack.x86_64 0:1.0.6-1.el7_3
+  libnfnetlink.x86_64 0:1.0.1-4.el7
+  libnfsidmap.x86_64 0:0.25-19.el7
+  libpath_utils.x86_64 0:0.2.1-32.el7
+  libpwquality.x86_64 0:1.2.3-5.el7
+  libref_array.x86_64 0:0.1.5-32.el7
+  libselinux.x86_64 0:2.5-15.el7
+  libsemanage.x86_64 0:2.5-14.el7
+  libsepol.x86_64 0:2.5-10.el7
+  libsmartcols.x86_64 0:2.23.2-65.el7
+  libss.x86_64 0:1.42.9-19.el7
+  libssh2.x86_64 0:1.8.0-4.el7
+  libstdc++.x86_64 0:4.8.5-44.el7
+  libtasn1.x86_64 0:4.10-1.el7
+  libtirpc.x86_64 0:0.2.4-0.16.el7
+  libuser.x86_64 0:0.60-9.el7
+  libutempter.x86_64 0:1.1.6-4.el7
+  libuuid.x86_64 0:2.23.2-65.el7
+  libverto.x86_64 0:0.2.5-4.el7
+  libverto-libevent.x86_64 0:0.2.5-4.el7
+  libxml2.x86_64 0:2.9.1-6.el7.5
+  linux-firmware.noarch 0:20200421-79.git78c0348.el7
+  logrotate.x86_64 0:3.8.6-19.el7
+  lua.x86_64 0:5.1.4-15.el7
+  lz4.x86_64 0:1.8.3-1.el7
+  make.x86_64 1:3.82-24.el7
+  ncurses.x86_64 0:5.9-14.20130511.el7_4
+  ncurses-base.noarch 0:5.9-14.20130511.el7_4
+  ncurses-libs.x86_64 0:5.9-14.20130511.el7_4
+  nspr.x86_64 0:4.21.0-1.el7
+  nss.x86_64 0:3.44.0-7.el7_7
+  nss-pem.x86_64 0:1.0.3-7.el7
+  nss-softokn.x86_64 0:3.44.0-8.el7_7
+  nss-softokn-freebl.x86_64 0:3.44.0-8.el7_7
+  nss-sysinit.x86_64 0:3.44.0-7.el7_7
+  nss-tools.x86_64 0:3.44.0-7.el7_7
+  nss-util.x86_64 0:3.44.0-4.el7_7
+  ntpdate.x86_64 0:4.2.6p5-29.el7.centos.2
+  numactl-libs.x86_64 0:2.0.12-5.el7
+  openldap.x86_64 0:2.4.44-22.el7
+  openssh.x86_64 0:7.4p1-21.el7
+  openssl-libs.x86_64 1:1.0.2k-19.el7
+  p11-kit.x86_64 0:0.23.5-3.el7
+  p11-kit-trust.x86_64 0:0.23.5-3.el7
+  pam.x86_64 0:1.1.8-23.el7
+  pcre.x86_64 0:8.32-17.el7
+  pkgconfig.x86_64 1:0.27.1-4.el7
+  popt.x86_64 0:1.13-16.el7
+  python.x86_64 0:2.7.5-89.el7
+  python-libs.x86_64 0:2.7.5-89.el7
+  qrencode-libs.x86_64 0:3.4.1-3.el7
+  quota.x86_64 1:4.01-19.el7
+  quota-nls.noarch 1:4.01-19.el7
+  readline.x86_64 0:6.2-11.el7
+  rpcbind.x86_64 0:0.2.0-49.el7
+  rpm-libs.x86_64 0:4.11.3-45.el7
+  sed.x86_64 0:4.2.2-7.el7
+  setup.noarch 0:2.8.71-11.el7
+  shadow-utils.x86_64 2:4.6-5.el7
+  shared-mime-info.x86_64 0:1.8-5.el7
+  sqlite.x86_64 0:3.7.17-8.el7_7.1
+  systemd.x86_64 0:219-78.el7
+  systemd-libs.x86_64 0:219-78.el7
+  systemd-sysv.x86_64 0:219-78.el7
+  sysvinit-tools.x86_64 0:2.88-14.dsf.el7
+  tcp_wrappers.x86_64 0:7.6-77.el7
+  tcp_wrappers-libs.x86_64 0:7.6-77.el7
+  tzdata.noarch 0:2020a-1.el7
+  ustr.x86_64 0:1.0.4-16.el7
+  util-linux.x86_64 0:2.23.2-65.el7
+  xz-libs.x86_64 0:5.2.2-1.el7
+  zlib.x86_64 0:1.2.7-18.el7
+Complete!
+Enter the dracut mode. Dracut version: 033. Dracut directory: dracut_033.
+Try to load drivers: tg3 bnx2 bnx2x e1000 e1000e igb mlx4_en virtio_net be2net ext3 ext4 to initrd.
+chroot /install/netboot/centos7.9/x86_64/compute/rootimg dracut  -f /tmp/initrd.62801.gz 3.10.0-1160.el7.x86_64
+No '/dev/log' or 'logger' included for syslog logging
+Turning off host-only mode: '/sys' is not mounted!
+Turning off host-only mode: '/proc' is not mounted!
+Turning off host-only mode: '/run' is not mounted!
+Turning off host-only mode: '/dev' is not mounted!
+dracut-install: ERROR: installing 'mkfs.xfs'
+dracut-install: ERROR: installing 'xfs_db'
+/usr/lib/dracut/dracut-install -D /var/tmp/dracut.dOhEO5/initramfs -a parted mke2fs bc mkswap swapon chmod mkfs mkfs.ext4 mkfs.xfs xfs_db
+grep: /etc/udev/rules.d/*: No such file or directory
+the initial ramdisk for stateless is generated successfully.
+Try to load drivers: tg3 bnx2 bnx2x e1000 e1000e igb mlx4_en virtio_net be2net ext3 ext4 to initrd.
+chroot /install/netboot/centos7.9/x86_64/compute/rootimg dracut  -f /tmp/initrd.62801.gz 3.10.0-1160.el7.x86_64
+No '/dev/log' or 'logger' included for syslog logging
+Turning off host-only mode: '/sys' is not mounted!
+Turning off host-only mode: '/proc' is not mounted!
+Turning off host-only mode: '/run' is not mounted!
+Turning off host-only mode: '/dev' is not mounted!
+dracut-install: ERROR: installing 'mkfs.xfs'
+dracut-install: ERROR: installing 'xfs_db'
+/usr/lib/dracut/dracut-install -D /var/tmp/dracut.tfRwP6/initramfs -a parted mke2fs bc mkswap swapon chmod mkfs mkfs.ext4 mkfs.xfs xfs_db
+grep: /etc/udev/rules.d/*: No such file or directory
+the initial ramdisk for statelite is generated successfully.
+[root@master ~]# ls /install/netboot/centos7.9/x86_64/compute/
+initrd-stateless.gz  initrd-statelite.gz  kernel  rootimg
+[root@master ~]# lsdef -t osimage
+centos7.9-x86_64-install-compute  (osimage)
+centos7.9-x86_64-netboot-compute  (osimage)
+centos7.9-x86_64-statelite-compute  (osimage)
+[root@master ~]# packimage centos7.9-x86_64-netboot-compute
+Packing contents of /install/netboot/centos7.9/x86_64/compute/rootimg
+archive method:cpio
+compress method:gzip
+
+[root@master ~]# mkdef -t node -o node1 provmethod=centos7.9-x86_64-netboot-compute
+Warning: [master]: A definition for 'node1' already exists. No changes will be made.  Run again with '-f' option to force replace.
+Error: [master]: 0 object definitions have been created or modified.
+[root@master ~]# chdef -t node -o node1 provmethod=centos7.9-x86_64-netboot-compute
+1 object definitions have been created or modified.
+[root@master ~]# lsdef -t node node1
+Object name: node1
+    groups=all
+    ip=192.168.86.155
+    mac=00:50:56:33:2E:D3
+    netboot=pxe
+    postbootscripts=otherpkgs
+    postscripts=syslog,remoteshell,syncfiles
+    provmethod=centos7.9-x86_64-netboot-compute
+[root@master ~]# nodeset node1 osimage=centos7.9-x86_64-netboot-compute
+node1: netboot centos7.9-x86_64-compute
+[root@master ~]# lsdef -t node node1
+Object name: node1
+    arch=x86_64
+    currstate=netboot centos7.9-x86_64-compute
+    groups=all
+    ip=192.168.86.155
+    mac=00:50:56:33:2E:D3
+    netboot=pxe
+    os=centos7.9
+    postbootscripts=otherpkgs
+    postscripts=syslog,remoteshell,syncfiles
+    profile=compute
+    provmethod=centos7.9-x86_64-netboot-compute
+[root@master ~]# makehosts
+[root@master ~]# makedhcp
+Usage: makedhcp -n
+        makedhcp -a
+        makedhcp -a -d
+        makedhcp -d noderange
+        makedhcp <noderange> [-s statements]
+        makedhcp -q
+        makedhcp [-h|--help]
+[root@master ~]# makedhcp -d node1
+[root@master ~]# systemctl status dhcpd
+● dhcpd.service - DHCPv4 Server Daemon
+   Loaded: loaded (/usr/lib/systemd/system/dhcpd.service; enabled; vendor preset: disabled)
+   Active: active (running) since Wed 2023-08-23 01:53:24 IST; 10min ago
+     Docs: man:dhcpd(8)
+           man:dhcpd.conf(5)
+ Main PID: 62675 (dhcpd)
+   Status: "Dispatching packets..."
+    Tasks: 1
+   CGroup: /system.slice/dhcpd.service
+           └─62675 /usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd --no-pid
+
+Aug 23 01:53:24 master.hpcsa.in dhcpd[62675]: ** Ignoring requests on ens33.  If this is not what
+Aug 23 01:53:24 master.hpcsa.in dhcpd[62675]:    you want, please write a subnet declaration
+Aug 23 01:53:24 master.hpcsa.in dhcpd[62675]:    in your dhcpd.conf file for the network segment
+Aug 23 01:53:24 master.hpcsa.in dhcpd[62675]:    to which interface ens33 is attached. **
+Aug 23 01:53:24 master.hpcsa.in dhcpd[62675]:
+Aug 23 01:53:24 master.hpcsa.in dhcpd[62675]: Sending on   Socket/fallback/fallback-net
+Aug 23 02:03:20 master.hpcsa.in dhcpd[62675]: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34: network ens34: no free leases
+Aug 23 02:03:22 master.hpcsa.in dhcpd[62675]: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34: network ens34: no free leases
+Aug 23 02:03:26 master.hpcsa.in dhcpd[62675]: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34: network ens34: no free leases
+Aug 23 02:03:34 master.hpcsa.in dhcpd[62675]: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34: network ens34: no free leases
+[root@master ~]# cat /var/lib/dhcpd/dhcpd.leases
+# The format of this file is documented in the dhcpd.leases(5) manual page.
+# This lease file was written by isc-dhcp-4.2.5
+
+server-duid "\000\001\000\001,w\325\262\000\014)\207>Q";
+
+host node1 {
+  dynamic;
+  hardware ethernet 00:50:56:33:2e:d3;
+  uid 00:50:56:33:2e:d3;
+  fixed-address 192.168.86.155;
+        supersede server.ddns-hostname = "node1";
+        supersede host-name = "node1";
+        if option vendor-class-identifier = "ScaleMP" {
+          supersede server.filename = "vsmp/pxelinux.0";
+        } else {
+          supersede server.filename = "pxelinux.0";
+        }
+}
+host node1 {
+  dynamic;
+  deleted;
+}
+[root@master ~]# systemctl restart dhcpd
+[root@master ~]# systemctl status dhcpd
+● dhcpd.service - DHCPv4 Server Daemon
+   Loaded: loaded (/usr/lib/systemd/system/dhcpd.service; enabled; vendor preset: disabled)
+   Active: active (running) since Wed 2023-08-23 02:06:11 IST; 6s ago
+     Docs: man:dhcpd(8)
+           man:dhcpd.conf(5)
+ Main PID: 92800 (dhcpd)
+   Status: "Dispatching packets..."
+    Tasks: 1
+   CGroup: /system.slice/dhcpd.service
+           └─92800 /usr/sbin/dhcpd -f -cf /etc/dhcp/dhcpd.conf -user dhcpd -group dhcpd --no-pid
+
+Aug 23 02:06:11 master.hpcsa.in systemd[1]: Started DHCPv4 Server Daemon.
+Aug 23 02:06:11 master.hpcsa.in dhcpd[92800]: Sending on   LPF/ens34/00:0c:29:87:3e:51/ens34
+Aug 23 02:06:11 master.hpcsa.in dhcpd[92800]:
+Aug 23 02:06:11 master.hpcsa.in dhcpd[92800]: No subnet declaration for ens33 (192.168.20.128).
+Aug 23 02:06:11 master.hpcsa.in dhcpd[92800]: ** Ignoring requests on ens33.  If this is not what
+Aug 23 02:06:11 master.hpcsa.in dhcpd[92800]:    you want, please write a subnet declaration
+Aug 23 02:06:11 master.hpcsa.in dhcpd[92800]:    in your dhcpd.conf file for the network segment
+Aug 23 02:06:11 master.hpcsa.in dhcpd[92800]:    to which interface ens33 is attached. **
+Aug 23 02:06:11 master.hpcsa.in dhcpd[92800]:
+Aug 23 02:06:11 master.hpcsa.in dhcpd[92800]: Sending on   Socket/fallback/fallback-net
+[root@master ~]# tailf /var/log/messages
+Aug 23 02:06:11 master dhcpd: ** Ignoring requests on ens33.  If this is not what
+Aug 23 02:06:11 master dhcpd:   you want, please write a subnet declaration
+Aug 23 02:06:11 master dhcpd:   in your dhcpd.conf file for the network segment
+Aug 23 02:06:11 master dhcpd:   to which interface ens33 is attached. **
+Aug 23 02:06:11 master dhcpd:
+Aug 23 02:06:11 master dhcpd: Sending on   Socket/fallback/fallback-net
+Aug 23 02:06:26 master dhcpd: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34: network ens34: no free leases
+Aug 23 02:06:28 master dhcpd: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34: network ens34: no free leases
+Aug 23 02:06:32 master dhcpd: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34: network ens34: no free leases
+Aug 23 02:06:40 master dhcpd: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34: network ens34: no free leases
+^C
+[root@master ~]# makedhcp -n
+Renamed existing dhcp configuration file to  /etc/dhcp/dhcpd.conf.xcatbak
+
+Warning: [master]: No dynamic range specified for 192.168.86.0. If hardware discovery is being used, a dynamic range is required.
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]# makedns -n
+Handling master in /etc/hosts.
+Handling localhost in /etc/hosts.
+Handling localhost in /etc/hosts.
+Handling node1 in /etc/hosts.
+Getting reverse zones, this may take several minutes for a large cluster.
+Completed getting reverse zones.
+Updating zones.
+Completed updating zones.
+Restarting named
+Restarting named complete
+Updating DNS records, this may take several minutes for a large cluster.
+Completed updating DNS records.
+DNS setup is completed
+[root@master ~]# makenetworks
+Warning: [master]: The network entry '192_168_20_0-255_255_255_0' already exists in xCAT networks table. Cannot create a definition for '192_168_20_0-255_255_255_0'
+Warning: [master]: The network entry '192_168_86_0-255_255_255_0' already exists in xCAT networks table. Cannot create a definition for '192_168_86_0-255_255_255_0'
+Warning: [master]: The network entry '192_168_122_0-255_255_255_0' already exists in xCAT networks table. Cannot create a definition for '192_168_122_0-255_255_255_0'
+[root@master ~]# tabdump networks
+#netname,net,mask,mgtifname,gateway,dhcpserver,tftpserver,nameservers,ntpservers,logservers,dynamicrange,staticrange,staticrangeincrement,nodehostname,ddnsdomain,vlanid,domain,mtu,comments,disable
+"192_168_20_0-255_255_255_0","192.168.20.0","255.255.255.0","ens33","192.168.20.2",,"<xcatmaster>",,,,,,,,,,,"1500",,
+"192_168_86_0-255_255_255_0","192.168.86.0","255.255.255.0","ens34","<xcatmaster>","192.168.86.154","<xcatmaster>",,,,,,,,,,"hpcsa.in","1500",,
+"192_168_122_0-255_255_255_0","192.168.122.0","255.255.255.0","virbr0","<xcatmaster>",,"<xcatmaster>",,,,,,,,,,,"1500",,
+[root@master ~]# tabedit networks
+[root@master ~]# makenetworks
+Warning: [master]: The network entry '192_168_20_0-255_255_255_0' already exists in xCAT networks table. Cannot create a definition for '192_168_20_0-255_255_255_0'
+Warning: [master]: The network entry '192_168_86_0-255_255_255_0' already exists in xCAT networks table. Cannot create a definition for '192_168_86_0-255_255_255_0'
+Warning: [master]: The network entry '192_168_122_0-255_255_255_0' already exists in xCAT networks table. Cannot create a definition for '192_168_122_0-255_255_255_0'
+[root@master ~]# makehosts
+[root@master ~]# makenetworks
+Warning: [master]: The network entry '192_168_20_0-255_255_255_0' already exists in xCAT networks table. Cannot create a definition for '192_168_20_0-255_255_255_0'
+Warning: [master]: The network entry '192_168_86_0-255_255_255_0' already exists in xCAT networks table. Cannot create a definition for '192_168_86_0-255_255_255_0'
+Warning: [master]: The network entry '192_168_122_0-255_255_255_0' already exists in xCAT networks table. Cannot create a definition for '192_168_122_0-255_255_255_0'
+[root@master ~]# makedhcp -n
+Renamed existing dhcp configuration file to  /etc/dhcp/dhcpd.conf.xcatbak
+
+Warning: [master]: No dynamic range specified for 192.168.86.0. If hardware discovery is being used, a dynamic range is required.
+[root@master ~]# makedns -n
+Handling master in /etc/hosts.
+Handling localhost in /etc/hosts.
+Handling localhost in /etc/hosts.
+Handling node1 in /etc/hosts.
+Getting reverse zones, this may take several minutes for a large cluster.
+Completed getting reverse zones.
+Updating zones.
+Completed updating zones.
+Restarting named
+Restarting named complete
+Updating DNS records, this may take several minutes for a large cluster.
+Completed updating DNS records.
+DNS setup is completed
+[root@master ~]# cat /var/lib/dhcpd/dhcpd.leases
+# The format of this file is documented in the dhcpd.leases(5) manual page.
+# This lease file was written by isc-dhcp-4.2.5
+
+server-duid "\000\001\000\001,w\325\262\000\014)\207>Q";
+
+[root@master ~]# tailf /var/log/messages
+Aug 23 02:10:44 master named[93089]: running
+Aug 23 02:10:45 master named[93089]: client @0x7fcc900c6cd0 192.168.86.154#42587/key xcat_key: signer "xcat_key" approved
+Aug 23 02:10:45 master named[93089]: client @0x7fcc900c6cd0 192.168.86.154#42587/key xcat_key: updating zone 'hpcsa.in/IN': adding an RR at 'master.hpcsa.in' A 192.168.86.154
+Aug 23 02:10:45 master named[93089]: client @0x7fcc900c6cd0 192.168.86.154#42587/key xcat_key: updating zone 'hpcsa.in/IN': adding an RR at 'node1.hpcsa.in' A 192.168.86.155
+Aug 23 02:10:46 master named[93089]: client @0x7fcc900c6cd0 192.168.86.154#44464/key xcat_key: signer "xcat_key" approved
+Aug 23 02:10:46 master named[93089]: client @0x7fcc900c6cd0 192.168.86.154#44464/key xcat_key: updating zone '86.168.192.IN-ADDR.ARPA/IN': adding an RR at '154.86.168.192.IN-ADDR.ARPA' PTR master.hpcsa.in.
+Aug 23 02:10:46 master named[93089]: client @0x7fcc900c6cd0 192.168.86.154#44464/key xcat_key: updating zone '86.168.192.IN-ADDR.ARPA/IN': adding an RR at '155.86.168.192.IN-ADDR.ARPA' PTR node1.hpcsa.in.
+Aug 23 02:11:05 master dhcpd: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34: network ens34: no free leases
+Aug 23 02:11:07 master dhcpd: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34: network ens34: no free leases
+Aug 23 02:11:11 master dhcpd: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34: network ens34: no free leases
+Aug 23 02:11:19 master dhcpd: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34: network ens34: no free leases
+Aug 23 02:11:32 master systemd: Started Session 15 of user root.
+Aug 23 02:11:32 master systemd-logind: New session 15 of user root.
+Aug 23 02:11:33 master dbus[727]: [system] Activating service name='org.freedesktop.problems' (using servicehelper)
+Aug 23 02:11:33 master dbus[727]: [system] Successfully activated service 'org.freedesktop.problems'
+Aug 23 02:12:15 master systemd: Stopping DHCPv4 Server Daemon...
+Aug 23 02:12:15 master systemd: Stopped DHCPv4 Server Daemon.
+Aug 23 02:12:15 master systemd: Starting DHCPv4 Server Daemon...
+Aug 23 02:12:15 master dhcpd: Internet Systems Consortium DHCP Server 4.2.5
+Aug 23 02:12:15 master dhcpd: Copyright 2004-2013 Internet Systems Consortium.
+Aug 23 02:12:15 master dhcpd: All rights reserved.
+Aug 23 02:12:15 master dhcpd: For info, please visit https://www.isc.org/software/dhcp/
+Aug 23 02:12:15 master dhcpd: Not searching LDAP since ldap-server, ldap-port and ldap-base-dn were not specified in the config file
+Aug 23 02:12:15 master dhcpd: Wrote 0 class decls to leases file.
+Aug 23 02:12:15 master dhcpd: Wrote 0 leases to leases file.
+Aug 23 02:12:15 master dhcpd:
+Aug 23 02:12:15 master dhcpd: No subnet declaration for virbr0 (192.168.122.1).
+Aug 23 02:12:15 master dhcpd: ** Ignoring requests on virbr0.  If this is not what
+Aug 23 02:12:15 master dhcpd:   you want, please write a subnet declaration
+Aug 23 02:12:15 master dhcpd:   in your dhcpd.conf file for the network segment
+Aug 23 02:12:15 master dhcpd:   to which interface virbr0 is attached. **
+Aug 23 02:12:15 master dhcpd:
+Aug 23 02:12:15 master dhcpd: Listening on LPF/ens34/00:0c:29:87:3e:51/ens34
+Aug 23 02:12:15 master dhcpd: Sending on   LPF/ens34/00:0c:29:87:3e:51/ens34
+Aug 23 02:12:15 master dhcpd:
+Aug 23 02:12:15 master systemd: Started DHCPv4 Server Daemon.
+Aug 23 02:12:15 master dhcpd: No subnet declaration for ens33 (192.168.20.128).
+Aug 23 02:12:15 master dhcpd: ** Ignoring requests on ens33.  If this is not what
+Aug 23 02:12:15 master dhcpd:   you want, please write a subnet declaration
+Aug 23 02:12:15 master dhcpd:   in your dhcpd.conf file for the network segment
+Aug 23 02:12:15 master dhcpd:   to which interface ens33 is attached. **
+Aug 23 02:12:15 master dhcpd:
+Aug 23 02:12:15 master dhcpd: Sending on   Socket/fallback/fallback-net
+Aug 23 02:12:36 master xcat[93199]: xCAT: Allowing makedhcp -a for root from localhost
+Aug 23 02:12:46 master systemd: Stopping DHCPv4 Server Daemon...
+Aug 23 02:12:46 master systemd: Stopped DHCPv4 Server Daemon.
+Aug 23 02:12:46 master systemd: Starting DHCPv4 Server Daemon...
+Aug 23 02:12:46 master dhcpd: Internet Systems Consortium DHCP Server 4.2.5
+Aug 23 02:12:46 master dhcpd: Copyright 2004-2013 Internet Systems Consortium.
+Aug 23 02:12:46 master dhcpd: All rights reserved.
+Aug 23 02:12:46 master dhcpd: For info, please visit https://www.isc.org/software/dhcp/
+Aug 23 02:12:46 master dhcpd: Not searching LDAP since ldap-server, ldap-port and ldap-base-dn were not specified in the config file
+Aug 23 02:12:46 master dhcpd: Wrote 0 class decls to leases file.
+Aug 23 02:12:46 master dhcpd: Wrote 0 deleted host decls to leases file.
+Aug 23 02:12:46 master dhcpd: Wrote 0 new dynamic host decls to leases file.
+Aug 23 02:12:46 master dhcpd: Wrote 0 leases to leases file.
+Aug 23 02:12:46 master dhcpd:
+Aug 23 02:12:46 master dhcpd: No subnet declaration for virbr0 (192.168.122.1).
+Aug 23 02:12:46 master dhcpd: ** Ignoring requests on virbr0.  If this is not what
+Aug 23 02:12:46 master dhcpd:   you want, please write a subnet declaration
+Aug 23 02:12:46 master dhcpd:   in your dhcpd.conf file for the network segment
+Aug 23 02:12:46 master dhcpd:   to which interface virbr0 is attached. **
+Aug 23 02:12:46 master dhcpd:
+Aug 23 02:12:46 master dhcpd: Listening on LPF/ens34/00:0c:29:87:3e:51/ens34
+Aug 23 02:12:46 master dhcpd: Sending on   LPF/ens34/00:0c:29:87:3e:51/ens34
+Aug 23 02:12:46 master dhcpd:
+Aug 23 02:12:46 master systemd: Started DHCPv4 Server Daemon.
+Aug 23 02:12:46 master dhcpd: No subnet declaration for ens33 (192.168.20.128).
+Aug 23 02:12:46 master dhcpd: ** Ignoring requests on ens33.  If this is not what
+Aug 23 02:12:46 master dhcpd:   you want, please write a subnet declaration
+Aug 23 02:12:46 master dhcpd:   in your dhcpd.conf file for the network segment
+Aug 23 02:12:46 master dhcpd:   to which interface ens33 is attached. **
+Aug 23 02:12:46 master dhcpd:
+Aug 23 02:12:46 master dhcpd: Sending on   Socket/fallback/fallback-net
+Aug 23 02:12:51 master dhcpd: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34
+Aug 23 02:12:51 master dhcpd: DHCPOFFER on 192.168.86.155 to 00:50:56:33:2e:d3 via ens34
+Aug 23 02:12:53 master dhcpd: DHCPREQUEST for 192.168.86.155 (192.168.86.154) from 00:50:56:33:2e:d3 via ens34
+Aug 23 02:12:53 master dhcpd: DHCPACK on 192.168.86.155 to 00:50:56:33:2e:d3 via ens34
+Aug 23 02:12:53 master in.tftpd[93235]: RRQ from 192.168.86.155 filename pxelinux.0
+Aug 23 02:12:53 master in.tftpd[93235]: Error code 0: TFTP Aborted
+Aug 23 02:12:53 master in.tftpd[93236]: RRQ from 192.168.86.155 filename pxelinux.0
+Aug 23 02:12:53 master in.tftpd[93236]: Client 192.168.86.155 finished pxelinux.0
+Aug 23 02:12:53 master in.tftpd[93237]: RRQ from 192.168.86.155 filename pxelinux.cfg/564d662f-37f3-5014-d3b3-60d9db9d8c49
+Aug 23 02:12:53 master in.tftpd[93237]: Client 192.168.86.155 File not found pxelinux.cfg/564d662f-37f3-5014-d3b3-60d9db9d8c49
+Aug 23 02:12:53 master in.tftpd[93238]: RRQ from 192.168.86.155 filename pxelinux.cfg/01-00-50-56-33-2e-d3
+Aug 23 02:12:53 master in.tftpd[93238]: Client 192.168.86.155 File not found pxelinux.cfg/01-00-50-56-33-2e-d3
+Aug 23 02:12:53 master in.tftpd[93239]: RRQ from 192.168.86.155 filename pxelinux.cfg/C0A8569B
+Aug 23 02:12:53 master in.tftpd[93239]: Client 192.168.86.155 finished pxelinux.cfg/C0A8569B
+Aug 23 02:12:53 master in.tftpd[93240]: RRQ from 192.168.86.155 filename xcat/osimage/centos7.9-x86_64-netboot-compute/kernel
+Aug 23 02:12:56 master in.tftpd[93240]: Client 192.168.86.155 finished xcat/osimage/centos7.9-x86_64-netboot-compute/kernel
+Aug 23 02:12:56 master in.tftpd[93241]: RRQ from 192.168.86.155 filename xcat/osimage/centos7.9-x86_64-netboot-compute/initrd-stateless.gz
+Aug 23 02:13:09 master in.tftpd[93241]: Client 192.168.86.155 finished xcat/osimage/centos7.9-x86_64-netboot-compute/initrd-stateless.gz
+Aug 23 02:13:13 master dhcpd: DHCPDISCOVER from 00:50:56:33:2e:d3 via ens34
+Aug 23 02:13:13 master dhcpd: DHCPOFFER on 192.168.86.155 to 00:50:56:33:2e:d3 via ens34
+Aug 23 02:13:13 master dhcpd: DHCPREQUEST for 192.168.86.155 (192.168.86.154) from 00:50:56:33:2e:d3 via ens34
+Aug 23 02:13:13 master dhcpd: DHCPACK on 192.168.86.155 to 00:50:56:33:2e:d3 via ens34
+Aug 23 02:13:16 master xcat[5595]: xcatd: install monitor received a connection request from 192.168.86.155
+Aug 23 02:13:16 master xcat[5595]: xcatd: 192.168.86.155 is matched with node node1
+Aug 23 02:13:16 master xcat[5595]: xcat.updatestatus - node1: provisioning detected...
+Aug 23 02:13:16 master xcat[5595]: xcat.updatestatus - node1: changing status=netbooting
+Aug 23 02:13:16 master xcat[5595]: xcatd: finish a connection request for node1 from 192.168.86.155
+Aug 23 02:13:26 master dhcpd: DHCPREQUEST for 192.168.86.155 from 00:50:56:33:2e:d3 via ens34
+Aug 23 02:13:26 master dhcpd: DHCPACK on 192.168.86.155 to 00:50:56:33:2e:d3 via ens34
+Aug 23 02:13:28 master xcat[5595]: xcatd: install monitor received a connection request from 192.168.86.155
+Aug 23 02:13:28 master xcat[5595]: xcatd: 192.168.86.155 is matched with node node1
+Aug 23 02:13:28 master xcat[5595]: xcat.updatestatus - node1: changing status=postbooting
+Aug 23 02:13:28 master xcat[5595]: xcatd: finish a connection request for node1 from 192.168.86.155
+Aug 23 02:13:29 master xcat[93255]: xCAT: Allowing getpostscript from node1
+Aug 23 02:13:29 master xcat[93258]: getpostscript: Sending scripts data to node1...
+Aug 23 02:13:30 master xcat[93260]: xCAT: Allowing getcredentials ssh_dsa_hostkey from node1
+Aug 23 02:13:30 master xcat[93263]: credentials: sending ssh_dsa_hostkey to node1
+Aug 23 02:13:30 master xcat[93264]: xCAT: Allowing getcredentials ssh_rsa_hostkey from node1
+Aug 23 02:13:30 master xcat[93267]: credentials: sending ssh_rsa_hostkey to node1
+Aug 23 02:13:31 master xcat[93268]: xCAT: Allowing getcredentials ssh_ecdsa_hostkey from node1
+Aug 23 02:13:31 master xcat[93271]: credentials: sending ssh_ecdsa_hostkey to node1
+Aug 23 02:13:31 master xcat[93272]: xCAT: Allowing getcredentials ssh_ed25519_hostkey from node1
+Aug 23 02:13:31 master xcat[93275]: credentials: sending ssh_ed25519_hostkey to node1
+Aug 23 02:13:31 master xcat[93276]: xCAT: Allowing getcredentials ssh_root_pub_key from node1
+Aug 23 02:13:31 master xcat[93279]: credentials: sending ssh_root_pub_key to node1
+Aug 23 02:13:31 master xcat[93279]: credentials: The root's public ssh key is in /root/.ssh/id_rsa.pub.
+Aug 23 02:13:31 master xcat[93280]: xCAT: Allowing getcredentials ssh_root_key from node1
+Aug 23 02:13:31 master xcat[93283]: credentials: sending ssh_root_key to node1
+Aug 23 02:13:31 master xcat[93283]: credentials: The root's private ssh key is in /root/.ssh/id_rsa.
+Aug 23 02:13:31 master xcat[5595]: xcatd: install monitor received a connection request from 192.168.86.155
+Aug 23 02:13:31 master xcat[5595]: xcatd: 192.168.86.155 is matched with node node1
+Aug 23 02:13:31 master xcat[5595]: xcat.updatestatus - node1: changing status=booted
+Aug 23 02:13:31 master xcat[5595]: xcatd: finish a connection request for node1 from 192.168.86.155
+^[[A^[[A^[[A^[[A^[[A^[[A^[[A^C
+[root@master ~]# ^C
+[root@master ~]# #mkdef -t node -o node2 groups=all netboot=pxe mac=00:50:56:36:7A:45 ip=192.168.86.156
+(reverse-i-search)`prov': chdef -t node -o node1 ^Covmethod=centos7.9-x86_64-netboot-compute
+[root@master ~]# mkdef -t node -o node2 groups=all netboot=pxe mac=00:50:56:36:7A:45 ip=192.168.86.156 provmethod=centos7.9-x86_64-netboot-compute
+1 object definitions have been created or modified.
+[root@master ~]# nodeset node2 osimage=centos7.9-x86_64-netboot-compute                                                                           node2: netboot centos7.9-x86_64-compute
+Error: [master]: master.hpcsa.in: Unable to determine or reasonably guess the image server for node2
+Warning: [master]: The hostname node2 of node node2 could not be resolved.
+[root@master ~]# makehosts
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]# cat /etc/
+Display all 311 possibilities? (y or n)
+[root@master ~]# cat /etc/^C
+[root@master ~]# cat /var/lib/dhcpd/dhcpd.leases
+# The format of this file is documented in the dhcpd.leases(5) manual page.
+# This lease file was written by isc-dhcp-4.2.5
+
+host node1 {
+  dynamic;
+  hardware ethernet 00:50:56:33:2e:d3;
+  uid 00:50:56:33:2e:d3;
+  fixed-address 192.168.86.155;
+        supersede server.ddns-hostname = "node1";
+        supersede host-name = "node1";
+        if option vendor-class-identifier = "ScaleMP" {
+          supersede server.filename = "vsmp/pxelinux.0";
+        } else {
+          supersede server.filename = "pxelinux.0";
+        }
+}
+server-duid "\000\001\000\001,w\325\262\000\014)\207>Q";
+
+host node2 {
+  dynamic;
+  hardware ethernet 00:50:56:36:7a:45;
+  uid 00:50:56:36:7a:45;
+        supersede server.ddns-hostname = "node2";
+        supersede host-name = "node2";
+        if option vendor-class-identifier = "ScaleMP" {
+          supersede server.filename = "vsmp/pxelinux.0";
+        } else {
+          supersede server.filename = "pxelinux.0";
+        }
+}
+[root@master ~]# makedhcp -a
+[root@master ~]# systemctl restart dhcpd
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]# nodeset node2 osimage=centos7.9-x86_64-netboot-compute
+node2: netboot centos7.9-x86_64-compute
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]# history
+    1  vim xcat_install.sh
+    2  ip r
+    3  lsblk
+    4  vim /etc/hosts
+    5  hostnamectl set-hostname master
+    6  hostnamectl set-hostname master.hpcsa.in
+    7  ip a
+    8  vim /etc/hosts
+    9  vim /etc/resolv.conf
+   10  yum install ntp
+   11  tabdump site
+   12  systemctl stop firewalld.service
+   13  systemctl disable firewalld.service
+   14  vim /etc/selinux/config
+   15  reboot
+   16  ip a
+   17  ifup ens34
+   18  ip a
+   19  yum install yum-utils -y
+   20  wget -P /etc/yum.repos.d https://xcat.org/files/xcat/repos/yum/latest/xcat-core/xcat-core.repo
+   21  wget -P /etc/yum.repos.d https://xcat.org/files/xcat/repos/yum/latest/xcat-core/xcat-core.repo --no-check-certificate
+   22  wget -P /etc/yum.repos.d https://xcat.org/files/xcat/repos/yum/xcat-dep/rh7/x86_64/xcat-dep.repo
+   23  wget -P /etc/yum.repos.d https://xcat.org/files/xcat/repos/yum/xcat-dep/rh7/x86_64/xcat-dep.repo --no-check-certificate
+   24  ls
+   25  yum clean all
+   26  yum makecache
+   27  yum install xCAT
+   28  source /etc/profile.d/xcat.sh
+   29  ls xcatd
+   30  lsxcatd -a
+   31  tabdump site
+   32  ip r
+   33  chtab -t site domain=hpcsa.in
+   34* chdef -t site dhcpinterfaces="ens34"
+   35  tabdump site | grep domain
+   36  chdef -t site dhcpinterfaces=ens34
+   37  ip r
+   38  tabdump site
+   39  tabdump networks
+   40  chdef -t site dhcpinterfaces='master|ens34'
+   41  tabdump networks
+   42  cat /etc/dhcp/dhcpd.conf
+   43  makedhcp -n
+   44  cat /etc/dhcp/dhcpd.conf
+   45  vim /etc/dhcp/dhcpd.conf
+   46  systemctl statuts dhcpd
+   47  systemctl status dhcpd
+   48  makehost
+   49  makehosts
+   50  cat /etc/hosts
+   51  makenetworks
+   52  tabdump networks
+   53  makedns -n
+   54  makentp
+   55  xcatprobe
+   56  xcatprobe
+   57  xcatprobe -l
+   58  xcatprobe xcatmn
+   59  chtab key=system passwd.username=root passwd.password=123
+   60  xcatprobe xcatmn
+   61  ip r
+   62  xcatprobe xcatmn -i ens34
+   63  tabdump networks
+   64  chdef -t networks -o domain=hpcsa.in
+   65  chdef -t networks -o 192_168_86_0-255_255_255_0 domain=hpcsa.in
+   66  chdef -t network -o 192_168_86_0-255_255_255_0 domain=hpcsa.in
+   67  tabdump networks
+   68  #chdef -t network -o 192_168_86_0-255_255_255_0 dhcpserver=hpcsa.in
+   69  vim /etc/dhcp/dhcpd.conf
+   70  chdef -t network -o 192_168_86_0-255_255_255_0 dhcpserver=192.168.86.154
+   71  ip a
+   72  xcatprobe xcatmn
+   73  makedns
+   74  xcatprobe xcatmn
+   75  makedns -n
+   76  xcatprobe xcatmn
+   77  ip a
+   78  df -Th
+   79  mkdir -p /centos_image
+   80  mkdef -t node -o node1 groups=all netboot=pxe mac=00:50:56:33:2E:D3 ip=192.168.86.155
+   81  lsdef node1
+   82  makehosts
+   83  makedhcp
+   84  makedhcp -d node1
+   85  cat /etc/hosts
+   86  cat /etc/dhcp/dhcpd.conf
+   87  cat /etc/dhcp/dhcpd.conf | grep node1
+   88  cat /var/lib/dhcpd/dhcpd.leases
+   89  mv /var/lib/dhcpd/dhcpd.leases /var/lib/dhcpd/dhcpd.leases_bk
+   90  ls -lrth
+   91  ls -lrth /var/lib/dhcpd
+   92  touch /var/lib/dhcpd/dhcpd.leases
+   93  cat /var/lib/dhcpd/dhcpd.leases
+   94  systemctl status dhcp
+   95  systemctl status dhcpd
+   96  systemctl restart dhcpd
+   97  systemctl status dhcpd
+   98  makedhcp -n
+   99  cat /var/lib/dhcpd/dhcpd.leases
+  100  nodels
+  101  copycds /centos_image/CentOS-7-x86_64-DVD-2009.iso
+  102  lsdef -t osimage
+  103  ledef -t osimage centos7.9-x86_64-netboot-compute
+  104  lsdef -t osimage centos7.9-x86_64-netboot-compute
+  105  ls /install/
+  106  genimage centos7.9-x86_64-netboot-compute
+  107  ls /install/netboot/centos7.9/x86_64/compute/
+  108  lsdef -t osimage
+  109  packimage centos7.9-x86_64-netboot-compute
+  110  mkdef -t node -o node1 provmethod=centos7.9-x86_64-netboot-compute
+  111  chdef -t node -o node1 provmethod=centos7.9-x86_64-netboot-compute
+  112  lsdef -t node node1
+  113  nodeset node1 osimage=centos7.9-x86_64-netboot-compute
+  114  lsdef -t node node1
+  115  makehosts
+  116  makedhcp
+  117  makedhcp -d node1
+  118  systemctl status dhcpd
+  119  cat /var/lib/dhcpd/dhcpd.leases
+  120  systemctl restart dhcpd
+  121  systemctl status dhcpd
+  122  tailf /var/log/messages
+  123  makedhcp -n
+  124  makedns -n
+  125  makenetworks
+  126  tabdump networks
+  127  tabedit networks
+  128  makenetworks
+  129  makehosts
+  130  makenetworks
+  131  makedhcp -n
+  132  makedns -n
+  133  cat /var/lib/dhcpd/dhcpd.leases
+  134  tailf /var/log/messages
+  135  #mkdef -t node -o node2 groups=all netboot=pxe mac=00:50:56:36:7A:45 ip=192.168.86.156
+  136  mkdef -t node -o node2 groups=all netboot=pxe mac=00:50:56:36:7A:45 ip=192.168.86.156 provmethod=centos7.9-x86_64-netboot-compute
+  137  nodeset node2 osimage=centos7.9-x86_64-netboot-compute
+  138  makehosts
+  139  cat /var/lib/dhcpd/dhcpd.leases
+  140  makedhcp -a
+  141  systemctl restart dhcpd
+  142  nodeset node2 osimage=centos7.9-x86_64-netboot-compute
+  143  history
+[root@master ~]#
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+login as: root
+root@192.168.86.154's password:
+Last login: Wed Aug 23 00:50:55 2023 from 192.168.86.1
+
+
+
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]# cat /var/lib/dhcpd/dhcpd.leases
+# The format of this file is documented in the dhcpd.leases(5) manual page.
+# This lease file was written by isc-dhcp-4.2.5
+
+server-duid "\000\001\000\001,w\325\262\000\014)\207>Q";
+
+[root@master ~]# ^C
+[root@master ~]# systemctl restart dhcpd
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]#
+[root@master ~]# cat /var/lib/dhcpd/dhcpd.leases
+# The format of this file is documented in the dhcpd.leases(5) manual page.
+# This lease file was written by isc-dhcp-4.2.5
+
+server-duid "\000\001\000\001,w\325\262\000\014)\207>Q";
+
+[root@master ~]# makedhcp -a
+[root@master ~]# cat /var/lib/dhcpd/dhcpd.leases
+# The format of this file is documented in the dhcpd.leases(5) manual page.
+# This lease file was written by isc-dhcp-4.2.5
+
+server-duid "\000\001\000\001,w\325\262\000\014)\207>Q";
+
+host node1 {
+  dynamic;
+  hardware ethernet 00:50:56:33:2e:d3;
+  uid 00:50:56:33:2e:d3;
+  fixed-address 192.168.86.155;
+        supersede server.ddns-hostname = "node1";
+        supersede host-name = "node1";
+        if option vendor-class-identifier = "ScaleMP" {
+          supersede server.filename = "vsmp/pxelinux.0";
+        } else {
+          supersede server.filename = "pxelinux.0";
+        }
+}
+[root@master ~]# systemctl restart dhcpd
+[root@master ~]#
+
