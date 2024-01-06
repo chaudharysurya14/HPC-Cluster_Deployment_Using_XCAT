@@ -37,4 +37,4 @@ This project facilitates the deployment of a High-Performance Computing (HPC) cl
 
 ```bash
 # Example command or script
-./deploy_cluster.sh -c my_cluster_config.yaml
+./deploy_cluster.sh -c my_cluster_config.sh
