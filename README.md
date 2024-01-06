@@ -29,7 +29,7 @@ This project facilitates the deployment of a High-Performance Computing (HPC) cl
     cd HPC-Cluster_Deployment_Using_XCAT
     ```
 
-2. [Add specific installation steps]
+2. [Follow steps given in pdf]
 
 ## Usage
 
